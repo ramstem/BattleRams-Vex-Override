@@ -17,7 +17,7 @@ pros::MotorGroup liftMotors({3, -8}, pros::MotorGears::green); // lift motor gro
 pros::MotorGroup rollerMotors({1}, pros::MotorGears::blue); // roller motor group
 
 //Inertial Sensor
-pros::Imu imu(15);
+pros::Imu imu(6);
 
 //Pneumatics
 pros::adi::Pneumatics Claw('A',false,false);
