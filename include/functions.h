@@ -31,7 +31,7 @@ struct WallCheckpoint {
 bool correctPositionFromWall(const WallCheckpoint& checkpoint);
 
 // Convenience overload using this robot's measured mounting offsets:
-// front 2.25 forward; left/right 5 outward. Assumes zero cross-axis offsets.
+// front 5.25 right / 2.25 forward; left/right 5 outward / zero forward.
 // wallCoordinate is relative to the robot's STARTING position (0,0).
 bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
                              double wallCoordinate, double maxCorrection = 6.0);

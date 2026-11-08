@@ -91,5 +91,10 @@ int main() {
     assert(std::abs(chassis.pose.x) < 0.001 && chassis.pose.y == 0);
     reset(); assert(!correctPositionFromWall(static_cast<WallSensor>(99), WallAxis::Y, 25));
     assert(chassis.changes == 0);
-    std::cout << "38 wall correction scenarios passed\n";
+    // Slightly angled: the front sensor's RIGHT offset now projects onto Y.
+    reset(); chassis.pose = {0, 2, 4}; distanceFront.readings = {508};
+    assert(correctPositionFromWall(WallSensor::Front, WallAxis::Y, 22.25));
+    assert(std::abs(chassis.pose.y - 0.4204) < 0.001);
+    assert(chassis.pose.x == 0 && chassis.pose.theta == 4);
+    std::cout << "39 wall correction scenarios passed\n";
 }
