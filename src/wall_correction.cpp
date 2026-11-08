@@ -7,6 +7,14 @@
 namespace {
 constexpr double DEG_TO_RAD = 3.14159265358979323846 / 180.0;
 
+// Sensor FACE positions relative to the robot center, in inches.
+// Cross-axis offsets are assumed zero: front centered left/right; sides
+// directly beside the center. Update these if mounting measurements differ.
+struct SensorMount { double right; double forward; };
+constexpr SensorMount FRONT_MOUNT{0.0, 2.25};
+constexpr SensorMount LEFT_MOUNT{-5.0, 0.0};
+constexpr SensorMount RIGHT_MOUNT{5.0, 0.0};
+
 bool usablePose(const lemlib::Pose& pose) {
     return std::isfinite(pose.x) && std::isfinite(pose.y) &&
            std::isfinite(pose.theta);
@@ -85,4 +93,17 @@ bool correctPositionFromWall(const WallCheckpoint& c) {
     chassis.setPose(xAxis ? corrected : pose.x,
                     xAxis ? pose.y : corrected, pose.theta);
     return true;
+}
+
+bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
+                             double wallCoordinate, double maxCorrection) {
+    SensorMount mount{};
+    switch (sensor) {
+        case WallSensor::Front: mount = FRONT_MOUNT; break;
+        case WallSensor::Left: mount = LEFT_MOUNT; break;
+        case WallSensor::Right: mount = RIGHT_MOUNT; break;
+        default: return false;
+    }
+    return correctPositionFromWall({sensor, axis, wallCoordinate,
+                                   mount.right, mount.forward, maxCorrection});
 }

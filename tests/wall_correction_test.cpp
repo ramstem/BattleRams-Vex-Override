@@ -79,5 +79,17 @@ int main() {
     reset(); chassis.pose.theta = 359; assert(correctPositionFromWall(front));
     assert(chassis.pose.theta == 359 && chassis.pose.x == 10);
     assert(std::abs(chassis.pose.y - 19.96) < 0.02);
-    std::cout << "34 wall correction scenarios passed\n";
+    // Robot-specific mounts at heading 0; wall locations relative to start.
+    reset(); chassis.pose = {0, 2, 0}; distanceFront.readings = {508};
+    assert(correctPositionFromWall(WallSensor::Front, WallAxis::Y, 22.25));
+    assert(chassis.pose.x == 0 && std::abs(chassis.pose.y) < 0.001);
+    reset(); chassis.pose = {2, 0, 0}; distanceLeft.readings = {508};
+    assert(correctPositionFromWall(WallSensor::Left, WallAxis::X, -25));
+    assert(std::abs(chassis.pose.x) < 0.001 && chassis.pose.y == 0);
+    reset(); chassis.pose = {2, 0, 0}; distanceRight.readings = {508};
+    assert(correctPositionFromWall(WallSensor::Right, WallAxis::X, 25));
+    assert(std::abs(chassis.pose.x) < 0.001 && chassis.pose.y == 0);
+    reset(); assert(!correctPositionFromWall(static_cast<WallSensor>(99), WallAxis::Y, 25));
+    assert(chassis.changes == 0);
+    std::cout << "38 wall correction scenarios passed\n";
 }
