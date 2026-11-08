@@ -132,12 +132,6 @@ SECTIONS
    *(.gcc_except_table)
 } > RAM
 
-.mmu_tbl (ALIGN(16384)) : {
-   __mmu_tbl_start = .;
-   *(.mmu_tbl)
-   __mmu_tbl_end = .;
-} > RAM
-
 .ARM.exidx : {
    __exidx_start = .;
    *(.ARM.exidx*)
@@ -166,11 +160,9 @@ SECTIONS
    __fini_array_end = .;
 } > RAM
 
-.ARM.attributes : {
-   __ARM.attributes_start = .;
-   *(.ARM.attributes)
-   __ARM.attributes_end = .;
-} > RAM
+/DISCARD/ : {
+  *(.ARM.attributes*)
+}
 
 .sdata : {
    __sdata_start = .;
@@ -209,7 +201,6 @@ SECTIONS
    *(.bss)
    *(.bss.*)
    *(.gnu.linkonce.b.*)
-   *(COMMON)
    __bss_end = .;
 } > RAM
 
@@ -217,7 +208,17 @@ _SDA_BASE_ = __sdata_start + ((__sbss_end - __sdata_start) / 2 );
 
 _SDA2_BASE_ = __sdata2_start + ((__sbss2_end - __sdata2_start) / 2 );
 
-/* Generate Stack and Heap definitions */
+/* Stack section
+   provides __stack for the partner SDK initialization (vexMain).
+   This prevents the stack from being placed in .bss, which would
+   cause corruption of variables at the end of .bss (see issue #783).
+   FreeRTOS task stacks are dynamically allocated separately. */
+.stack (NOLOAD) : ALIGN(8) {
+   _stack_end = .;
+   . += _STACK_SIZE;
+   __stack = .;
+   _stack_start = .;
+} > RAM
 
 .heap (NOLOAD) : {
    . = ALIGN(16);
@@ -228,36 +229,6 @@ _SDA2_BASE_ = __sdata2_start + ((__sbss2_end - __sdata2_start) / 2 );
    _heap_end = .;
    HeapLimit = .;
 } > HEAP
-
-.stack (NOLOAD) : {
-   . = ALIGN(16);
-   _stack_end = .;
-   . += _STACK_SIZE;
-   . = ALIGN(16);
-   _stack = .;
-   __stack = _stack;
-   . = ALIGN(16);
-   _irq_stack_end = .;
-   . += _IRQ_STACK_SIZE;
-   . = ALIGN(16);
-   __irq_stack = .;
-   _supervisor_stack_end = .;
-   . += _SUPERVISOR_STACK_SIZE;
-   . = ALIGN(16);
-   __supervisor_stack = .;
-   _abort_stack_end = .;
-   . += _ABORT_STACK_SIZE;
-   . = ALIGN(16);
-   __abort_stack = .;
-   _fiq_stack_end = .;
-   . += _FIQ_STACK_SIZE;
-   . = ALIGN(16);
-   __fiq_stack = .;
-   _undef_stack_end = .;
-   . += _UNDEF_STACK_SIZE;
-   . = ALIGN(16);
-   __undef_stack = .;
-} > COLD_MEMORY
 
 _end = .;
 }
