@@ -2,6 +2,7 @@
 
 #include "globals.h"
 #include "main.h"
+#include "liblvgl/lvgl.h"
 
 #include <algorithm>
 #include <array>
@@ -72,6 +73,8 @@ std::array<std::size_t, MAX_AUTON_BUTTONS> autonButtonIndices{};
 
 lv_obj_t* dashboardScreen = nullptr;
 lv_obj_t* autonScreen = nullptr;
+lv_obj_t* distanceScreen = nullptr;
+std::array<lv_obj_t*, 3> distanceLabels{};
 
 lv_obj_t* statusLabel = nullptr;
 lv_obj_t* batteryLabel = nullptr;
@@ -100,7 +103,7 @@ void styleScreen(lv_obj_t* screen) {
         LV_PART_MAIN
     );
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 }
 
 lv_obj_t* createCard(
@@ -114,7 +117,7 @@ lv_obj_t* createCard(
 
     lv_obj_set_pos(card, x, y);
     lv_obj_set_size(card, width, height);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_set_style_bg_color(card, lv_color_hex(COLOR_CARD), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
@@ -294,6 +297,7 @@ void stopRobotAfterAutonTest() {
     // Stop the mechanisms using their existing brake modes.
     chainLift.move(0);
     liftMotors.move(0);
+    rollerMotors.brake();
 }
 
 void updateSelectedAutonDisplay() {
@@ -503,7 +507,7 @@ void showAutonSelectorEvent(lv_event_t* event) {
 
     updateAutonButtonStyles();
 
-    lv_scr_load_anim(
+    lv_screen_load_anim(
         autonScreen,
         LV_SCR_LOAD_ANIM_MOVE_LEFT,
         200,
@@ -517,13 +521,19 @@ void showDashboardEvent(lv_event_t* event) {
         return;
     }
 
-    lv_scr_load_anim(
+    lv_screen_load_anim(
         dashboardScreen,
         LV_SCR_LOAD_ANIM_MOVE_RIGHT,
         200,
         0,
         false
     );
+}
+
+void showDistanceEvent(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        lv_screen_load(distanceScreen);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -652,11 +662,34 @@ void updateMotorTemperatures() {
     );
 }
 
+void updateDistanceSensors() {
+    const std::array<pros::Distance*, 3> sensors{
+        &distanceFront, &distanceLeft, &distanceRight
+    };
+    for (std::size_t i = 0; i < sensors.size(); ++i) {
+        if (distanceLabels[i] == nullptr) continue;
+        const auto mm = sensors[i]->get();
+        char text[64];
+        if (mm == PROS_ERR) {
+            std::snprintf(text, sizeof(text), "SENSOR ERROR");
+        } else if (mm < 20 || mm > 2000) {
+            // Includes the no-object/out-of-range reading. Never show it as
+            // a usable distance; these readings must not drive an approach.
+            std::snprintf(text, sizeof(text), "NO USABLE RANGE");
+        } else {
+            std::snprintf(text, sizeof(text), "%ld mm / %.1f in",
+                          static_cast<long>(mm), mm / 25.4);
+        }
+        lv_label_set_text(distanceLabels[i], text);
+    }
+}
+
 void dashboardUpdateTimer(lv_timer_t*) {
     updateCompetitionStatus();
     updateBatteryStatus();
     updateOdometryStatus();
     updateMotorTemperatures();
+    updateDistanceSensors();
     updateSelectedAutonDisplay();
     updateAutonButtonStyles();
 }
@@ -747,15 +780,15 @@ void createDashboardScreen() {
         180
     );
 
-    lv_obj_t* autonButton = lv_btn_create(dashboardScreen);
+    lv_obj_t* autonButton = lv_button_create(dashboardScreen);
     lv_obj_set_pos(autonButton, 5, 186);
-    lv_obj_set_size(autonButton, 470, 48);
+    lv_obj_set_size(autonButton, 310, 48);
     styleButton(autonButton, COLOR_ACCENT);
 
     selectedAutonLabel = lv_label_create(autonButton);
     lv_label_set_text(selectedAutonLabel, "AUTON: NONE");
     lv_label_set_long_mode(selectedAutonLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_width(selectedAutonLabel, 440);
+    lv_obj_set_width(selectedAutonLabel, 290);
     lv_obj_set_style_text_align(selectedAutonLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_color(
         selectedAutonLabel,
@@ -770,6 +803,43 @@ void createDashboardScreen() {
         LV_EVENT_CLICKED,
         nullptr
     );
+
+    lv_obj_t* distanceButton = lv_button_create(dashboardScreen);
+    lv_obj_set_pos(distanceButton, 320, 186);
+    lv_obj_set_size(distanceButton, 155, 48);
+    styleButton(distanceButton, COLOR_CARD);
+    lv_obj_t* distanceLabel = lv_label_create(distanceButton);
+    lv_label_set_text(distanceLabel, "DISTANCE");
+    lv_obj_set_style_text_color(distanceLabel, lv_color_hex(COLOR_TEXT), LV_PART_MAIN);
+    lv_obj_align(distanceLabel, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_event_cb(distanceButton, showDistanceEvent, LV_EVENT_CLICKED, nullptr);
+}
+
+void createDistanceScreen() {
+    distanceScreen = lv_obj_create(nullptr);
+    styleScreen(distanceScreen);
+    lv_obj_t* header = createCard(distanceScreen, 5, 4, 470, 38);
+    lv_obj_t* back = lv_button_create(header);
+    lv_obj_set_pos(back, 5, 4);
+    lv_obj_set_size(back, 80, 30);
+    styleButton(back, COLOR_BORDER);
+    lv_obj_t* backLabel = lv_label_create(back);
+    lv_label_set_text(backLabel, "< BACK");
+    lv_obj_set_style_text_color(backLabel, lv_color_hex(COLOR_TEXT), LV_PART_MAIN);
+    lv_obj_align(backLabel, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_event_cb(back, showDashboardEvent, LV_EVENT_CLICKED, nullptr);
+    createLabel(header, "DISTANCE SENSORS", 110, 10, 340, COLOR_ACCENT);
+
+    const std::array<const char*, 3> names{
+        "FRONT / PORT 5", "LEFT / PORT 13", "RIGHT / PORT 10"
+    };
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        lv_obj_t* card = createCard(distanceScreen, 5, 49 + 53 * i, 470, 47);
+        createLabel(card, names[i], 10, 14, 175, COLOR_MUTED);
+        distanceLabels[i] = createLabel(card, "--", 190, 14, 270);
+    }
+    createLabel(distanceScreen, "Measured from sensor face. Display only.",
+                10, 215, 460, COLOR_MUTED);
 }
 
 void createAutonScreen() {
@@ -778,7 +848,7 @@ void createAutonScreen() {
 
     lv_obj_t* header = createCard(autonScreen, 5, 4, 470, 38);
 
-    lv_obj_t* backButton = lv_btn_create(header);
+    lv_obj_t* backButton = lv_button_create(header);
     lv_obj_set_pos(backButton, 5, 4);
     lv_obj_set_size(backButton, 80, 30);
     styleButton(backButton, COLOR_BORDER);
@@ -837,7 +907,7 @@ void createAutonScreen() {
 
         autonButtonIndices[i] = i;
 
-        lv_obj_t* button = lv_btn_create(autonScreen);
+        lv_obj_t* button = lv_button_create(autonScreen);
         lv_obj_set_pos(button, x, y);
         lv_obj_set_size(button, 225, 38);
         styleButton(button, COLOR_CARD);
@@ -861,7 +931,7 @@ void createAutonScreen() {
         autonButtonLabels.push_back(label);
     }
 
-    runAutonButton = lv_btn_create(autonScreen);
+    runAutonButton = lv_button_create(autonScreen);
     lv_obj_set_pos(runAutonButton, 10, 199);
     lv_obj_set_size(runAutonButton, 460, 36);
     styleButton(runAutonButton, COLOR_ACCENT);
@@ -901,11 +971,13 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
 
     createDashboardScreen();
     createAutonScreen();
+    createDistanceScreen();
 
     updateSelectedAutonDisplay();
     updateAutonButtonStyles();
 
-    lv_scr_load(dashboardScreen);
+    updateDistanceSensors();
+    lv_screen_load(dashboardScreen);
     lv_timer_create(dashboardUpdateTimer, DISPLAY_REFRESH_MS, nullptr);
 }
 

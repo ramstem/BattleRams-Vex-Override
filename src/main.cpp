@@ -1,6 +1,5 @@
 #include "main.h"
 #include "globals.h"
-#include "auto_roller.hpp"
 #include "pros/adi.hpp"
 #include "robot/auton.h"
 #include "pros/apix.h"
@@ -23,7 +22,8 @@ void initialize() {
 // Initialize the Brain screen.
      // Keep the robot stationary while this runs.
     chassis.calibrate();
-    auto_roller::initialize();
+    rollerMotors.set_brake_mode_all(pros::MotorBrake::brake);
+    rollerMotors.brake();
 
     robot_ui::initialize({
         {"DO NOTHING", nullptr},
@@ -41,7 +41,7 @@ void initialize() {
  * the robot is enabled, this task will exit.
  */
 void disabled() {
-    auto_roller::reset();
+    rollerMotors.brake();
 }
 
 /**
@@ -89,7 +89,7 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-    auto_roller::reset();
+    rollerMotors.brake();
     bool autonTestPaused = false;
 
     chassis.setPose(0, 0,0);
@@ -104,7 +104,7 @@ void opcontrol() {
         // get joystick positions
         if (robot_ui::isAutonTestRunning()) {
             if (!autonTestPaused) {
-                auto_roller::reset();
+                rollerMotors.brake();
                 autonTestPaused = true;
             }
             pros::delay(20);
@@ -113,9 +113,15 @@ void opcontrol() {
         autonTestPaused = false;
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        // Update the Down toggle before deciding whether to drive or hold.
-        auto_roller::update();
-        auto_roller::drive(leftY, rightX);
+        chassis.arcade(leftY, rightX);
+
+        // The optical sensor has been removed. Keep manual roller control.
+        // Down is now unassigned; there is no automatic color/drive-hold mode.
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
+            rollerMotors.move(-127);
+        } else {
+            rollerMotors.brake();
+        }
         // delay to save resources
         pros::delay(10); //this is super important, never delete this line
        

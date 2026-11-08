@@ -1,8 +1,8 @@
 #pragma once
 
-void chainLift();
-void chainLift_reverse();
-void chainLift_brake();
+void chain_lift();
+void chain_lift_reverse();
+void chain_lift_brake();
 void lift();
 void roller();
 
