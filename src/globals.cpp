@@ -2,7 +2,7 @@
 #include "lemlib/chassis/trackingWheel.hpp"
 #include "pros/misc.h"
 #include "pros/motor_group.hpp"
-#include "pros/optical.hpp"
+#include "pros/distance.hpp"
 #include <cstdio>
 
 using namespace lemlib;
@@ -16,20 +16,17 @@ pros::MotorGroup chainLift({ -2,9}, pros::MotorGears::green); // intake motor gr
 pros::MotorGroup liftMotors({3, -8}, pros::MotorGears::green); // lift motor group
 pros::MotorGroup rollerMotors({1}, pros::MotorGears::blue); // roller motor group
 
-//color sensor
-pros::Optical colorSensor(7);
-
 //Inertial Sensor
-pros::Imu imu(15);
+pros::Imu imu(6);
 
 //Pneumatics
 pros::adi::Pneumatics Claw('A',false,false);
-//Distance Sensors
-//pros::Distance dNorth(10);
-//pros::Distance dSouth(14);
-//pros::Distance dEast(0);
-//pros::Distance dWest(0);
-pros::Rotation chainLiftEnc(5);
+// Distance sensors: directions are relative to the robot.
+pros::Distance distanceFront(5);
+pros::Distance distanceLeft(13);
+pros::Distance distanceRight(10);
+
+pros::Rotation chainLiftEnc(7);
 pros::Rotation liftMotorsEnc(4);
 // tracking wheels
 // horizontal tracking wheel encoder.

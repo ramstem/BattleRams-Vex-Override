@@ -9,6 +9,11 @@
 
 using namespace lemlib;
 
+void auto_distance_test() {
+    const bool reached = driveToDistance(6.0, 40, 3000);
+    std::cout << "Distance test: " << (reached ? "reached target" : "stopped without reaching target") << std::endl;
+}
+
 void auto_test() {
     chassis.setPose(0, 0, 0);
     chassis.moveToPoint(

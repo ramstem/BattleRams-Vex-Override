@@ -4,7 +4,7 @@
 #include "api.h"
 #include "lemlib/api.hpp"
 #include "pros/adi.hpp"
-#include "pros/optical.hpp"
+#include "pros/distance.hpp"
 
 //controller
 extern pros::Controller controller;
@@ -16,10 +16,9 @@ extern lemlib::Drivetrain drivetrain;
 
 extern pros::Imu imu;
 
-extern pros::Distance dNorth;
-extern pros::Distance dSouth;
-extern pros::Distance dEast;
-extern pros::Distance dWest;
+extern pros::Distance distanceFront;
+extern pros::Distance distanceLeft;
+extern pros::Distance distanceRight;
 
 extern pros::Rotation liftEnc;
 extern pros::Rotation liftMotorsEnc;
@@ -36,8 +35,6 @@ extern lemlib::OdomSensors sensors;
 extern lemlib::ExpoDriveCurve throttleCurve;
 extern lemlib::ExpoDriveCurve steerCurve;
 extern lemlib::Chassis chassis;
-
-extern pros::Optical colorSensor;
 
 //motors
 extern pros::MotorGroup chainLift;
