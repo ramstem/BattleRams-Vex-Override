@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -600,10 +601,14 @@ void updateOdometryStatus() {
     const lemlib::Pose pose = chassis.getPose();
     const double verticalDistance = verticalTrackingWheel.getDistanceTraveled();
     const double horizontalDistance = horizontalTrackingWheel.getDistanceTraveled();
+    errno = 0;
     const double imuHeading = imu.get_heading();
+    // Capture immediately: subsequent device calls can overwrite errno.
+    const int imuError = errno;
 
     char poseText[80];
     char headingText[96];
+    char imuText[32];
     char trackingText[104];
 
     // Use snprintf rather than lv_label_set_text_fmt for floating-point values.
@@ -615,12 +620,22 @@ void updateOdometryStatus() {
         pose.y
     );
 
+    if (std::isfinite(imuHeading) && imuHeading >= 0.0 && imuHeading < 360.0) {
+        std::snprintf(imuText, sizeof(imuText), "%6.1f deg", imuHeading);
+    } else if (imuError == EAGAIN) {
+        std::snprintf(imuText, sizeof(imuText), "CALIBRATING");
+    } else {
+        // PROS_ERR_F is infinity. Show the actual read failure rather than
+        // presenting it as an angle, or hiding it behind a stale value.
+        std::snprintf(imuText, sizeof(imuText), "ERR %d", imuError);
+    }
+
     std::snprintf(
         headingText,
         sizeof(headingText),
-        "LemLib: %6.1f deg   IMU: %6.1f deg",
+        "LemLib: %6.1f deg   IMU: %s",
         pose.theta,
-        imuHeading
+        imuText
     );
 
     std::snprintf(
