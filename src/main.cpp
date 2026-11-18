@@ -98,15 +98,22 @@ void opcontrol() {
     clawMotors.brake();
     ClawToggle clawToggle;
     bool clawControlsArmed = false;
+    bool clawMotorErrorReported = false;
     bool autonTestPaused = false;
 
     chassis.setPose(0, 0,0);
 
     while (true) {
-        const bool connected = controller.is_connected() == 1;
-        const bool forwardHeld = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2) == 1;
-        const bool reverseHeld = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) == 1;
-        if (!connected) clawControlsArmed = false;
+        const auto connection = controller.is_connected();
+        const auto forward = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
+        const auto reverse = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
+        // PROS passes through the VEX connection status, including tethered mode.
+        const bool inputsValid = connection > 0 && connection != PROS_ERR &&
+                                 forward >= 0 && forward != PROS_ERR &&
+                                 reverse >= 0 && reverse != PROS_ERR;
+        const bool forwardHeld = inputsValid && forward > 0;
+        const bool reverseHeld = inputsValid && reverse > 0;
+        if (!inputsValid) clawControlsArmed = false;
         else if (!forwardHeld && !reverseHeld) clawControlsArmed = true;
         const int clawPower = clawToggle.update(forwardHeld, reverseHeld);
         // get joystick positions
@@ -138,8 +145,13 @@ void opcontrol() {
         if (!clawControlsArmed || clawPower == 0) {
             clawToggle.stop();
             clawMotors.brake();
+            clawMotorErrorReported = false;
         } else {
-            clawMotors.move(clawPower);
+            const bool motorError = clawMotors.move(clawPower) == PROS_ERR;
+            if (motorError && !clawMotorErrorReported) {
+                std::puts("Claw motor command failed. Check Smart Port 12.");
+            }
+            clawMotorErrorReported = motorError;
         }
 
 
