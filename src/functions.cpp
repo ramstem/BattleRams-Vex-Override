@@ -10,7 +10,6 @@
 #include "pros/misc.h"
 #include "pros/motors.hpp"
 #include "pros/rotation.h"
-#include "pros/adi.h"
 #include "pros/rtos.hpp"
 #include <cmath>
 #include <cstdio>
@@ -19,18 +18,6 @@
 
 using namespace lemlib;
 
-void chain_lift() {
-    chainLift.move(127); // move front intake at full speed
-    //outtakeMotor.move(-127); // move descore motor at full speed
-}
-
-void chain_lift_reverse() {
-    chainLift.move(-127); // move front intake at full speed
-}
-
-void chain_lift_brake() {
-    chainLift.brake(); // move front intake at full speed
-}
 void lift() {
     liftMotors.move(127); // move front intake at full speed
 }

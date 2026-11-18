@@ -36,9 +36,6 @@ bool correctPositionFromWall(const WallCheckpoint& checkpoint);
 bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
                              double wallCoordinate, double maxCorrection = 6.0);
 
-void chain_lift();
-void chain_lift_reverse();
-void chain_lift_brake();
 void lift();
 void roller();
 

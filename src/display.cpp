@@ -29,7 +29,7 @@ namespace {
 // lemlib::TrackingWheel horizontalTrackingWheel;
 // pros::MotorGroup leftMotors;
 // pros::MotorGroup rightMotors;
-// pros::MotorGroup intakeMotors;
+// pros::MotorGroup clawMotors;
 // pros::MotorGroup liftMotors;
 //
 // Rename the references in this file if your objects use different names.
@@ -85,7 +85,7 @@ lv_obj_t* headingLabel = nullptr;
 lv_obj_t* trackingLabel = nullptr;
 lv_obj_t* liftPositionLabel = nullptr;
 
-// Capture once at program startup, with the continuous lift physically down.
+// Capture once at program startup, with the lift physically down.
 // A software offset avoids changing the rotation sensor used by future controls.
 std::int32_t liftStartingPosition = 0;
 bool liftZeroValid = false;
@@ -93,7 +93,7 @@ int liftZeroError = 0;
 
 lv_obj_t* leftDriveTempLabel = nullptr;
 lv_obj_t* rightDriveTempLabel = nullptr;
-lv_obj_t* intakeTempLabel = nullptr;
+lv_obj_t* clawTempLabel = nullptr;
 lv_obj_t* liftTempLabel = nullptr;
 
 lv_obj_t* selectedAutonLabel = nullptr;
@@ -304,7 +304,7 @@ void stopRobotAfterAutonTest() {
     rightMotors.brake();
 
     // Stop the mechanisms using their existing brake modes.
-    chainLift.move(0);
+    clawMotors.brake();
     liftMotors.move(0);
     rollerMotors.brake();
 }
@@ -661,7 +661,7 @@ void updateOdometryStatus() {
 
 void initializeLiftReadout() {
     errno = 0;
-    const auto position = chainLiftEnc.get_position();
+    const auto position = liftMotorsEnc.get_position();
     liftZeroError = errno;
     liftZeroValid = position != PROS_ERR;
     if (liftZeroValid) liftStartingPosition = position;
@@ -675,7 +675,7 @@ void updateLiftPosition() {
         std::snprintf(text, sizeof(text), "LIFT: ZERO ERR %d", liftZeroError);
     } else {
         errno = 0;
-        const auto position = chainLiftEnc.get_position();
+        const auto position = liftMotorsEnc.get_position();
         const int error = errno;
         if (position == PROS_ERR) {
             std::snprintf(text, sizeof(text), "LIFT: SENSOR ERR %d", error);
@@ -708,9 +708,9 @@ void updateMotorTemperatures() {
     );
 
     updateTemperatureLabel(
-        intakeTempLabel,
-        "CHAIN LIFT",
-        chainLift.get_temperature_all()
+        clawTempLabel,
+        "CLAW",
+        clawMotors.get_temperature_all()
     );
 
     updateTemperatureLabel(
@@ -828,9 +828,9 @@ void createDashboardScreen() {
         58,
         180
     );
-    intakeTempLabel = createLabel(
+    clawTempLabel = createLabel(
         temperatureCard,
-        "INTAKE: --",
+        "CLAW: --",
         10,
         82,
         180
@@ -893,12 +893,15 @@ void createDistanceScreen() {
     lv_obj_add_event_cb(back, showDashboardEvent, LV_EVENT_CLICKED, nullptr);
     createLabel(header, "DISTANCE SENSORS", 110, 10, 340, COLOR_ACCENT);
 
-    const std::array<const char*, 3> names{
-        "FRONT / PORT 5", "LEFT / PORT 13", "RIGHT / PORT 10"
+    const std::array<const char*, 3> names{"FRONT", "LEFT", "RIGHT"};
+    const std::array<unsigned, 3> ports{
+        distanceFront.get_port(), distanceLeft.get_port(), distanceRight.get_port()
     };
     for (std::size_t i = 0; i < names.size(); ++i) {
         lv_obj_t* card = createCard(distanceScreen, 5, 49 + 53 * i, 470, 47);
-        createLabel(card, names[i], 10, 14, 175, COLOR_MUTED);
+        char title[32];
+        std::snprintf(title, sizeof(title), "%s / PORT %u", names[i], ports[i]);
+        createLabel(card, title, 10, 14, 175, COLOR_MUTED);
         distanceLabels[i] = createLabel(card, "--", 190, 14, 270);
     }
     createLabel(distanceScreen, "Measured from sensor face. Display only.",

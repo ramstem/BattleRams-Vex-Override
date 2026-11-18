@@ -1,6 +1,6 @@
 #include "main.h"
 #include "globals.h"
-#include "pros/adi.hpp"
+#include "claw_toggle.hpp"
 #include "robot/auton.h"
 #include "pros/apix.h"
 #include "display.hpp"
@@ -25,6 +25,9 @@ void initialize() {
     rollerMotors.set_brake_mode_all(pros::MotorBrake::brake);
     rollerMotors.brake();
 
+    clawMotors.set_brake_mode_all(pros::MotorBrake::brake);
+    clawMotors.brake();
+
     robot_ui::initialize({
         {"DO NOTHING", nullptr},
 
@@ -43,6 +46,7 @@ void initialize() {
  */
 void disabled() {
     rollerMotors.brake();
+    clawMotors.brake();
 }
 
 /**
@@ -73,7 +77,7 @@ void competition_initialize() {
 ASSET(test_txt);
 
 void autonomous() {
-
+    clawMotors.brake();
 }
 
 /**
@@ -91,21 +95,26 @@ void autonomous() {
  */
 void opcontrol() {
     rollerMotors.brake();
+    clawMotors.brake();
+    ClawToggle clawToggle;
+    bool clawControlsArmed = false;
     bool autonTestPaused = false;
 
     chassis.setPose(0, 0,0);
 
-    bool intakeState = false;
-    bool outputState = false;
-    bool liftState = false;
-    bool armState = false;
-    bool ClawState = false;
-
     while (true) {
+        const bool connected = controller.is_connected() == 1;
+        const bool forwardHeld = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2) == 1;
+        const bool reverseHeld = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) == 1;
+        if (!connected) clawControlsArmed = false;
+        else if (!forwardHeld && !reverseHeld) clawControlsArmed = true;
+        const int clawPower = clawToggle.update(forwardHeld, reverseHeld);
         // get joystick positions
         if (robot_ui::isAutonTestRunning()) {
+            clawToggle.stop();
             if (!autonTestPaused) {
                 rollerMotors.brake();
+                clawMotors.brake();
                 autonTestPaused = true;
             }
             pros::delay(20);
@@ -126,16 +135,12 @@ void opcontrol() {
         // delay to save resources
         pros::delay(10); //this is super important, never delete this line
 
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            chainLift.move(127);       // Hold R2: intake forward
+        if (!clawControlsArmed || clawPower == 0) {
+            clawToggle.stop();
+            clawMotors.brake();
+        } else {
+            clawMotors.move(clawPower);
         }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-            chainLift.move(-127);      // Hold L2: intake reverse
-        }
-        else {
-            chainLift.move(0);         // Release: stop powering the intake
-        }
-        chainLift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
 
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
@@ -148,16 +153,6 @@ void opcontrol() {
         liftMotors.brake();// Hold current position
         }
         liftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-
-        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
-            if (ClawState == false) {
-                Claw.set_value(true);
-                ClawState = true;
-            } else {
-                Claw.set_value(false);
-                ClawState = false;
-            }
-        }
 
     pros::delay(20);
     }
