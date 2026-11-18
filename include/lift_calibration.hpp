@@ -1,9 +1,7 @@
 #pragma once
 
 namespace lift_calibration {
-// Signed carriage travel per rotation-sensor revolution. Leave 0 until measured;
-// the dashboard then displays signed shaft revolutions instead of guessed inches.
-// Example calibration: measure a 6-inch rise and divide 6 by displayed rev.
-// A negative rev reading while raising requires a negative conversion factor.
-inline constexpr double INCHES_PER_SENSOR_REVOLUTION = 0.0;
+// Calibration from the fully lowered position: 6.00 inches of carriage rise
+// produced -2.837 sensor revolutions. The negative scale makes raising positive.
+inline constexpr double INCHES_PER_SENSOR_REVOLUTION = 6.0 / -2.837;
 }
