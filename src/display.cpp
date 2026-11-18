@@ -2,6 +2,7 @@
 
 #include "globals.h"
 #include "main.h"
+#include "lift_calibration.hpp"
 #include "liblvgl/lvgl.h"
 
 #include <algorithm>
@@ -82,6 +83,13 @@ lv_obj_t* batteryLabel = nullptr;
 lv_obj_t* poseLabel = nullptr;
 lv_obj_t* headingLabel = nullptr;
 lv_obj_t* trackingLabel = nullptr;
+lv_obj_t* liftPositionLabel = nullptr;
+
+// Capture once at program startup, with the continuous lift physically down.
+// A software offset avoids changing the rotation sensor used by future controls.
+std::int32_t liftStartingPosition = 0;
+bool liftZeroValid = false;
+int liftZeroError = 0;
 
 lv_obj_t* leftDriveTempLabel = nullptr;
 lv_obj_t* rightDriveTempLabel = nullptr;
@@ -651,6 +659,41 @@ void updateOdometryStatus() {
     lv_label_set_text(trackingLabel, trackingText);
 }
 
+void initializeLiftReadout() {
+    errno = 0;
+    const auto position = chainLiftEnc.get_position();
+    liftZeroError = errno;
+    liftZeroValid = position != PROS_ERR;
+    if (liftZeroValid) liftStartingPosition = position;
+}
+
+void updateLiftPosition() {
+    if (liftPositionLabel == nullptr) return;
+    char text[64];
+    if (!liftZeroValid) {
+        // Do not silently zero later: the lift might have moved by then.
+        std::snprintf(text, sizeof(text), "LIFT: ZERO ERR %d", liftZeroError);
+    } else {
+        errno = 0;
+        const auto position = chainLiftEnc.get_position();
+        const int error = errno;
+        if (position == PROS_ERR) {
+            std::snprintf(text, sizeof(text), "LIFT: SENSOR ERR %d", error);
+        } else {
+            // get_position accumulates multiple turns, in centidegrees.
+            const double revolutions =
+                (static_cast<double>(position) - liftStartingPosition) / 36000.0;
+            const double scale = lift_calibration::INCHES_PER_SENSOR_REVOLUTION;
+            if (std::isfinite(scale) && scale != 0.0) {
+                std::snprintf(text, sizeof(text), "LIFT: %.2f in", revolutions * scale);
+            } else {
+                std::snprintf(text, sizeof(text), "LIFT: %+.3f rev (CAL)", revolutions);
+            }
+        }
+    }
+    lv_label_set_text(liftPositionLabel, text);
+}
+
 void updateMotorTemperatures() {
     updateTemperatureLabel(
         leftDriveTempLabel,
@@ -703,6 +746,7 @@ void dashboardUpdateTimer(lv_timer_t*) {
     updateCompetitionStatus();
     updateBatteryStatus();
     updateOdometryStatus();
+    updateLiftPosition();
     updateMotorTemperatures();
     updateDistanceSensors();
     updateSelectedAutonDisplay();
@@ -738,21 +782,25 @@ void createDashboardScreen() {
         COLOR_ACCENT
     );
 
-    poseLabel = createLabel(odometryCard, "X: --   Y: --", 10, 38, 245);
+    poseLabel = createLabel(odometryCard, "X: --   Y: --", 10, 34, 245);
     headingLabel = createLabel(
         odometryCard,
         "LemLib: --   IMU: --",
         10,
-        69,
+        58,
         245
     );
     trackingLabel = createLabel(
         odometryCard,
         "Vertical: --   Horizontal: --",
         10,
-        100,
+        82,
         245,
         COLOR_MUTED
+    );
+
+    liftPositionLabel = createLabel(
+        odometryCard, "LIFT: --", 10, 106, 245, COLOR_ACCENT
     );
 
     lv_obj_t* temperatureCard = createCard(dashboardScreen, 275, 43, 200, 137);
@@ -984,6 +1032,7 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
     autonTestRunning.store(false);
     autonTestRoutine = nullptr;
 
+    initializeLiftReadout();
     createDashboardScreen();
     createAutonScreen();
     createDistanceScreen();
@@ -992,6 +1041,7 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
     updateAutonButtonStyles();
 
     updateDistanceSensors();
+    updateLiftPosition();
     lv_screen_load(dashboardScreen);
     lv_timer_create(dashboardUpdateTimer, DISPLAY_REFRESH_MS, nullptr);
 }
