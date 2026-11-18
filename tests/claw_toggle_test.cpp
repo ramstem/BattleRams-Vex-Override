@@ -13,13 +13,13 @@ int main() {
     claw.update(false, false);
     assert(claw.update(false, true) == -127);
     assert(claw.update(false, true) == -127);
-    assert(claw.update(false, false) == -127);
-    assert(claw.update(false, true) == 0);
-    claw.update(false, false);
+    assert(claw.update(false, false) == 0);
+    assert(claw.update(false, true) == -127);
+    assert(claw.update(false, false) == 0);
     assert(claw.update(true, false) == 127);
     claw.update(false, false);
     assert(claw.update(false, true) == -127); // Opposite press reverses.
-    claw.update(false, false);
+    assert(claw.update(false, false) == 0); // Release stops instead of resuming forward.
     assert(claw.update(true, false) == 127);
     assert(claw.update(true, true) == 0); // Both held stops.
     assert(claw.update(false, true) == 0); // Releasing one does not restart.
