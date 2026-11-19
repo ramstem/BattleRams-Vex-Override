@@ -106,6 +106,8 @@ void opcontrol() {
     bool clawMotorErrorReported = false;
     bool autonTestPaused = false;
     std::optional<double> liftTarget;
+    std::optional<std::uint32_t> liftBrakedAt;
+    bool liftAscending = false;
     std::uint32_t liftMoveStarted = 0;
     std::uint32_t liftLastProgress = 0;
     double liftProgressHeight = 0.0;
@@ -115,10 +117,12 @@ void opcontrol() {
     constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 5000;
     constexpr std::uint32_t LIFT_BOOST_INTERVAL_MS = 300;
     constexpr double LIFT_PROGRESS_INCHES = 0.10;
-    constexpr int LIFT_MAX_UP_POWER = 100;
-    constexpr int LIFT_MAX_DOWN_POWER = 65;
+    constexpr int LIFT_MAX_UP_POWER = 127;
+    constexpr int LIFT_MAX_DOWN_POWER = 75;
+    constexpr double LIFT_SCORING_MARGIN_INCHES = 0.5;
+    constexpr std::uint32_t LIFT_SETTLE_MS = 150;
     constexpr int LIFT_MAX_STALL_BOOST = 55;
-    constexpr double LIFT_POWER_PER_INCH = 18.0;
+    constexpr double LIFT_POWER_PER_INCH = 36.0;
     constexpr double AUTO_LIFT_CEILING = std::min(
         lift_calibration::MAX_CALIBRATED_HEIGHT_INCHES,
         lift_calibration::MAX_SAFE_HEIGHT_INCHES);
@@ -213,6 +217,8 @@ void opcontrol() {
                 }
                 if (next) {
                     liftTarget = next;
+                    liftBrakedAt.reset();
+                    liftAscending = *height < *next;
                     liftMoveStarted = pros::millis();
                     liftLastProgress = liftMoveStarted;
                     liftProgressHeight = *height;
@@ -230,15 +236,32 @@ void opcontrol() {
                 liftTarget.reset();
             }
             if (liftTarget) {
-                const double error = *liftTarget - *height;
-                if (std::abs(error) <= LIFT_TOLERANCE_INCHES) {
-                    liftTarget.reset();
+                const bool scoring = *liftTarget > 0.0;
+                const double stopHeight = scoring
+                    ? std::min(*liftTarget + LIFT_SCORING_MARGIN_INCHES, AUTO_LIFT_CEILING)
+                    : LIFT_TOLERANCE_INCHES;
+                const bool reachedStopHeight = liftAscending ? *height >= stopHeight : *height <= stopHeight;
+
+                if (liftBrakedAt || reachedStopHeight) {
                     liftMotors.brake();
+                    if (!liftBrakedAt) liftBrakedAt = now;
+                    if (now - *liftBrakedAt >= LIFT_SETTLE_MS) {
+                        liftBrakedAt.reset();
+                        if (scoring && *height < *liftTarget) {
+                            liftAscending = true;
+                            liftProgressHeight = *height;
+                            liftLastProgress = now;
+                        } else {
+                            liftTarget.reset();
+                        }
+                    }
                 } else {
-                    const int maxPower = error > 0 ? LIFT_MAX_UP_POWER : LIFT_MAX_DOWN_POWER;
+                    const int maxPower = liftAscending ? LIFT_MAX_UP_POWER : LIFT_MAX_DOWN_POWER;
+                    const double minPower = liftAscending ? 30.0 : 12.0;
                     int power = static_cast<int>(std::clamp(
-                        std::abs(error) * LIFT_POWER_PER_INCH, 12.0, static_cast<double>(maxPower)));
-                    if (error > 0) {
+                        std::abs(stopHeight - *height) * LIFT_POWER_PER_INCH,
+                        minPower, static_cast<double>(maxPower)));
+                    if (liftAscending) {
                         // Restore low approach power as soon as the lift moves again.
                         if (*height >= liftProgressHeight + LIFT_PROGRESS_INCHES) {
                             liftProgressHeight = *height;
@@ -250,7 +273,7 @@ void opcontrol() {
                             power = std::max(power, std::min(boostFloor, LIFT_MAX_STALL_BOOST));
                         }
                     }
-                    if (liftMotors.move(error > 0 ? power : -power) == PROS_ERR) {
+                    if (liftMotors.move(liftAscending ? power : -power) == PROS_ERR) {
                         liftTarget.reset();
                         liftMotors.brake();
                     }
