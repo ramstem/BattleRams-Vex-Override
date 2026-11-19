@@ -1,6 +1,12 @@
 #pragma once
 
 namespace lift_calibration {
+
+// Scoring heights in inches above the fully lowered position.
+inline constexpr double SCORING_HEIGHTS_INCHES[] = {
+    10.0, 15.5, 21.0, 26.5, 32.0, 37.5
+};
+
 // Recover the sensor positions from the readings taken with the old scale.
 inline constexpr double PREVIOUS_INCHES_PER_REVOLUTION = -1.770857753;
 inline constexpr double FIRST_POINT_REVOLUTIONS = 6.0 / PREVIOUS_INCHES_PER_REVOLUTION;
