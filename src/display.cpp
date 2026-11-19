@@ -683,12 +683,8 @@ void updateLiftPosition() {
             // get_position accumulates multiple turns, in centidegrees.
             const double revolutions =
                 (static_cast<double>(position) - liftStartingPosition) / 36000.0;
-            const double scale = lift_calibration::INCHES_PER_SENSOR_REVOLUTION;
-            if (std::isfinite(scale) && scale != 0.0) {
-                std::snprintf(text, sizeof(text), "LIFT: %.2f in", revolutions * scale);
-            } else {
-                std::snprintf(text, sizeof(text), "LIFT: %+.3f rev (CAL)", revolutions);
-            }
+            std::snprintf(text, sizeof(text), "LIFT: %.2f in",
+                          lift_calibration::heightInches(revolutions));
         }
     }
     lv_label_set_text(liftPositionLabel, text);
