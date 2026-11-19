@@ -1,6 +1,7 @@
 #pragma once
 
 #include <initializer_list>
+#include <optional>
 
 namespace robot_ui {
 
@@ -18,6 +19,9 @@ void initialize(
 void runSelectedAutonomous();
 
 const char* getSelectedAutonomousName();
+
+// Height relative to the lift zero captured at startup.
+std::optional<double> readLiftHeightInches();
 
 bool isAutonTestRunning();
 void stopRobotAfterAutonTest();

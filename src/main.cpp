@@ -4,12 +4,15 @@
 #include "robot/auton.h"
 #include "pros/apix.h"
 #include "display.hpp"
+#include "lift_calibration.hpp"
 #include "lemlib/asset.hpp"
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/chassis/trackingWheel.hpp"
 #include "pros/misc.h"
 #include "pros/rtos.hpp"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -27,6 +30,7 @@ void initialize() {
 
     clawMotors.set_brake_mode_all(pros::MotorBrake::brake);
     clawMotors.brake();
+    liftMotors.set_brake_mode_all(pros::MotorBrake::hold);
 
     robot_ui::initialize({
         {"DO NOTHING", nullptr},
@@ -45,6 +49,7 @@ void initialize() {
  * the robot is enabled, this task will exit.
  */
 void disabled() {
+    liftMotors.brake();
     rollerMotors.brake();
     clawMotors.brake();
 }
@@ -100,6 +105,15 @@ void opcontrol() {
     bool clawControlsArmed = false;
     bool clawMotorErrorReported = false;
     bool autonTestPaused = false;
+    std::optional<double> liftTarget;
+    std::uint32_t liftMoveStarted = 0;
+    bool liftPresetButtonsReady = false;
+
+    constexpr double LIFT_TOLERANCE_INCHES = 0.4;
+    constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 5000;
+    constexpr double AUTO_LIFT_CEILING = std::min(
+        lift_calibration::MAX_CALIBRATED_HEIGHT_INCHES,
+        lift_calibration::MAX_SAFE_HEIGHT_INCHES);
 
     chassis.setPose(0, 0,0);
 
@@ -119,6 +133,8 @@ void opcontrol() {
         // get joystick positions
         if (robot_ui::isAutonTestRunning()) {
             clawToggle.stop();
+            liftTarget.reset();
+            liftPresetButtonsReady = false;
             if (!autonTestPaused) {
                 rollerMotors.brake();
                 clawMotors.brake();
@@ -155,16 +171,64 @@ void opcontrol() {
         }
 
 
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-        liftMotors.move(127);// Move up
+        const auto manualUp = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1);
+        const auto manualDown = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1);
+        const auto stepUp = controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP);
+        const auto stepDown = controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN);
+        const bool liftInputsValid = connection > 0 && connection != PROS_ERR &&
+            (manualUp == 0 || manualUp == 1) && (manualDown == 0 || manualDown == 1) &&
+            (stepUp == 0 || stepUp == 1) && (stepDown == 0 || stepDown == 1);
+
+        if (!liftInputsValid || manualUp || manualDown) {
+            liftTarget.reset();
+            liftPresetButtonsReady = false;
+            if (liftInputsValid && manualUp != manualDown) {
+                liftMotors.move(manualUp ? 127 : -100);
+            } else {
+                liftMotors.brake();
+            }
+        } else {
+            const auto height = robot_ui::readLiftHeightInches();
+            const bool heightValid = height && *height >= -LIFT_TOLERANCE_INCHES &&
+                                     *height <= AUTO_LIFT_CEILING;
+            if (heightValid && liftPresetButtonsReady && stepUp != stepDown) {
+                const double from = liftTarget.value_or(*height);
+                std::optional<double> next;
+                if (stepDown && from > LIFT_TOLERANCE_INCHES) next = 0.0;
+                for (double preset : lift_calibration::SCORING_HEIGHTS_INCHES) {
+                    if (preset > AUTO_LIFT_CEILING) break;
+                    if (stepUp && preset > from + LIFT_TOLERANCE_INCHES) {
+                        next = preset;
+                        break;
+                    }
+                    if (stepDown && preset < from - LIFT_TOLERANCE_INCHES) next = preset;
+                }
+                if (next) {
+                    liftTarget = next;
+                    liftMoveStarted = pros::millis();
+                }
+            }
+            liftPresetButtonsReady = heightValid && !stepUp && !stepDown;
+
+            if (!heightValid || (liftTarget && pros::millis() - liftMoveStarted >= LIFT_MOVE_TIMEOUT_MS)) {
+                liftTarget.reset();
+            }
+            if (liftTarget) {
+                const double error = *liftTarget - *height;
+                if (std::abs(error) <= LIFT_TOLERANCE_INCHES) {
+                    liftTarget.reset();
+                    liftMotors.brake();
+                } else {
+                    const int power = static_cast<int>(std::clamp(std::abs(error) * 9.0, 12.0, 55.0));
+                    if (liftMotors.move(error > 0 ? power : -power) == PROS_ERR) {
+                        liftTarget.reset();
+                        liftMotors.brake();
+                    }
+                }
+            } else {
+                liftMotors.brake();
+            }
         }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-        liftMotors.move(-100);// Move down
-         }
-        else {
-        liftMotors.brake();// Hold current position
-        }
-        liftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
     pros::delay(20);
     }

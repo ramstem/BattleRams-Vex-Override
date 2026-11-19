@@ -675,16 +675,11 @@ void updateLiftPosition() {
         std::snprintf(text, sizeof(text), "LIFT: ZERO ERR %d", liftZeroError);
     } else {
         errno = 0;
-        const auto position = liftMotorsEnc.get_position();
-        const int error = errno;
-        if (position == PROS_ERR) {
-            std::snprintf(text, sizeof(text), "LIFT: SENSOR ERR %d", error);
+        const auto height = readLiftHeightInches();
+        if (height) {
+            std::snprintf(text, sizeof(text), "LIFT: %.2f in", *height);
         } else {
-            // get_position accumulates multiple turns, in centidegrees.
-            const double revolutions =
-                (static_cast<double>(position) - liftStartingPosition) / 36000.0;
-            std::snprintf(text, sizeof(text), "LIFT: %.2f in",
-                          lift_calibration::heightInches(revolutions));
+            std::snprintf(text, sizeof(text), "LIFT: SENSOR ERR %d", errno);
         }
     }
     lv_label_set_text(liftPositionLabel, text);
@@ -1043,6 +1038,14 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
     updateLiftPosition();
     lv_screen_load(dashboardScreen);
     lv_timer_create(dashboardUpdateTimer, DISPLAY_REFRESH_MS, nullptr);
+}
+
+std::optional<double> readLiftHeightInches() {
+    if (!liftZeroValid) return std::nullopt;
+    const auto position = liftMotorsEnc.get_position();
+    if (position == PROS_ERR) return std::nullopt;
+    const double revolutions = (static_cast<double>(position) - liftStartingPosition) / 36000.0;
+    return lift_calibration::heightInches(revolutions);
 }
 
 void runSelectedAutonomous() {
