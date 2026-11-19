@@ -87,7 +87,7 @@ lv_obj_t* liftPositionLabel = nullptr;
 
 // Capture once at program startup, with the lift physically down.
 // A software offset avoids changing the rotation sensor used by future controls.
-std::int32_t liftStartingPosition = 0;
+std::atomic<std::int32_t> liftStartingPosition{0};
 bool liftZeroValid = false;
 int liftZeroError = 0;
 
@@ -1044,8 +1044,15 @@ std::optional<double> readLiftHeightInches() {
     if (!liftZeroValid) return std::nullopt;
     const auto position = liftMotorsEnc.get_position();
     if (position == PROS_ERR) return std::nullopt;
-    const double revolutions = (static_cast<double>(position) - liftStartingPosition) / 36000.0;
+    const double revolutions = (static_cast<double>(position) - liftStartingPosition.load()) / 36000.0;
     return lift_calibration::heightInches(revolutions);
+}
+
+bool zeroLiftHeight() {
+    const auto position = liftMotorsEnc.get_position();
+    if (position == PROS_ERR) return false;
+    liftStartingPosition.store(position);
+    return true;
 }
 
 void runSelectedAutonomous() {

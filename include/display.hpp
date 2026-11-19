@@ -22,6 +22,8 @@ const char* getSelectedAutonomousName();
 
 // Height relative to the lift zero captured at startup.
 std::optional<double> readLiftHeightInches();
+// Capture the current encoder position after the lift has reached bottom.
+bool zeroLiftHeight();
 
 bool isAutonTestRunning();
 void stopRobotAfterAutonTest();

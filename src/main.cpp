@@ -106,6 +106,8 @@ void opcontrol() {
     bool clawMotorErrorReported = false;
     bool autonTestPaused = false;
     std::optional<double> liftTarget;
+    bool liftHoming = false;
+    std::optional<std::uint32_t> liftHomeProbeStarted;
     std::optional<std::uint32_t> liftBrakedAt;
     bool liftAscending = false;
     std::uint32_t liftMoveStarted = 0;
@@ -123,6 +125,12 @@ void opcontrol() {
     constexpr std::uint32_t LIFT_SETTLE_MS = 150;
     constexpr int LIFT_MAX_STALL_BOOST = 55;
     constexpr double LIFT_POWER_PER_INCH = 36.0;
+    constexpr double HOME_PROBE_HEIGHT = 1.5;
+    constexpr double HOME_MAX_ZERO_HEIGHT = 0.25;
+    constexpr double HOME_MIN_HEIGHT = -2.0;
+    constexpr int HOME_PROBE_POWER = 24;
+    constexpr std::uint32_t HOME_STILL_MS = 300;
+    constexpr std::uint32_t HOME_PROBE_TIMEOUT_MS = 1200;
     constexpr double AUTO_LIFT_CEILING = std::min(
         lift_calibration::MAX_CALIBRATED_HEIGHT_INCHES,
         lift_calibration::MAX_SAFE_HEIGHT_INCHES);
@@ -146,6 +154,7 @@ void opcontrol() {
         if (robot_ui::isAutonTestRunning()) {
             clawToggle.stop();
             liftTarget.reset();
+            liftHoming = false;
             liftPresetButtonsReady = false;
             if (!autonTestPaused) {
                 rollerMotors.brake();
@@ -193,6 +202,7 @@ void opcontrol() {
 
         if (!liftInputsValid || manualUp || manualDown) {
             liftTarget.reset();
+            liftHoming = false;
             liftPresetButtonsReady = false;
             if (liftInputsValid && manualUp != manualDown) {
                 liftMotors.move(manualUp ? 127 : -100);
@@ -203,17 +213,24 @@ void opcontrol() {
             const auto height = robot_ui::readLiftHeightInches();
             const bool heightValid = height && *height >= -LIFT_TOLERANCE_INCHES &&
                                      *height <= AUTO_LIFT_CEILING;
-            if (heightValid && liftPresetButtonsReady && stepUp != stepDown) {
+            const auto now = pros::millis();
+            const bool homeHeightValid = height && *height >= HOME_MIN_HEIGHT &&
+                                         *height <= lift_calibration::MAX_SAFE_HEIGHT_INCHES;
+            if (homeHeightValid && liftPresetButtonsReady && stepDown && !stepUp && !liftHoming) {
+                liftTarget.reset();
+                liftHoming = true;
+                liftMoveStarted = now;
+                liftHomeProbeStarted.reset();
+            }
+            if (heightValid && liftPresetButtonsReady && stepUp && !stepDown && !liftHoming) {
                 const double from = liftTarget.value_or(*height);
                 std::optional<double> next;
-                if (stepDown && from > LIFT_TOLERANCE_INCHES) next = 0.0;
                 for (double preset : lift_calibration::SCORING_HEIGHTS_INCHES) {
                     if (preset > AUTO_LIFT_CEILING) break;
-                    if (stepUp && preset > from + LIFT_TOLERANCE_INCHES) {
+                    if (preset > from + LIFT_TOLERANCE_INCHES) {
                         next = preset;
                         break;
                     }
-                    if (stepDown && preset < from - LIFT_TOLERANCE_INCHES) next = preset;
                 }
                 if (next) {
                     liftTarget = next;
@@ -224,9 +241,43 @@ void opcontrol() {
                     liftProgressHeight = *height;
                 }
             }
-            liftPresetButtonsReady = heightValid && !stepUp && !stepDown;
+            liftPresetButtonsReady = homeHeightValid && !stepUp && !stepDown;
 
-            const auto now = pros::millis();
+            if (liftHoming) {
+                if (!homeHeightValid || now - liftMoveStarted >= LIFT_MOVE_TIMEOUT_MS) {
+                    liftHoming = false;
+                    std::puts("Lift home stopped before confirming bottom.");
+                } else if (*height > HOME_PROBE_HEIGHT && !liftHomeProbeStarted) {
+                    const int power = static_cast<int>(std::clamp(
+                        *height * LIFT_POWER_PER_INCH, static_cast<double>(HOME_PROBE_POWER),
+                        static_cast<double>(LIFT_MAX_DOWN_POWER)));
+                    liftHoming = liftMotors.move(-power) != PROS_ERR;
+                } else {
+                    if (!liftHomeProbeStarted) {
+                        liftHomeProbeStarted = now;
+                        liftLastProgress = now;
+                        liftProgressHeight = *height;
+                    }
+                    if (std::abs(*height - liftProgressHeight) >= LIFT_PROGRESS_INCHES / 2.0) {
+                        liftProgressHeight = *height;
+                        liftLastProgress = now;
+                    }
+                    // Without a bottom switch, infer contact only near the old zero.
+                    if (*height <= HOME_MAX_ZERO_HEIGHT && now - liftLastProgress >= HOME_STILL_MS) {
+                        liftMotors.brake();
+                        if (!robot_ui::zeroLiftHeight()) std::puts("Lift home encoder reset failed.");
+                        liftHoming = false;
+                    } else if (now - *liftHomeProbeStarted >= HOME_PROBE_TIMEOUT_MS) {
+                        liftHoming = false;
+                        std::puts("Lift home could not confirm bottom near zero.");
+                    } else {
+                        liftHoming = liftMotors.move(-HOME_PROBE_POWER) != PROS_ERR;
+                    }
+                }
+                if (!liftHoming) liftMotors.brake();
+                pros::delay(20);
+                continue;
+            }
             if (heightValid && liftTarget && now - liftMoveStarted >= LIFT_MOVE_TIMEOUT_MS) {
                 std::printf("Lift preset timed out at %.2f in (target %.2f in)\n",
                             *height, *liftTarget);
@@ -236,10 +287,8 @@ void opcontrol() {
                 liftTarget.reset();
             }
             if (liftTarget) {
-                const bool scoring = *liftTarget > 0.0;
-                const double stopHeight = scoring
-                    ? std::min(*liftTarget + LIFT_SCORING_MARGIN_INCHES, AUTO_LIFT_CEILING)
-                    : LIFT_TOLERANCE_INCHES;
+                const double stopHeight =
+                    std::min(*liftTarget + LIFT_SCORING_MARGIN_INCHES, AUTO_LIFT_CEILING);
                 const bool reachedStopHeight = liftAscending ? *height >= stopHeight : *height <= stopHeight;
 
                 if (liftBrakedAt || reachedStopHeight) {
@@ -247,7 +296,7 @@ void opcontrol() {
                     if (!liftBrakedAt) liftBrakedAt = now;
                     if (now - *liftBrakedAt >= LIFT_SETTLE_MS) {
                         liftBrakedAt.reset();
-                        if (scoring && *height < *liftTarget) {
+                        if (*height < *liftTarget) {
                             liftAscending = true;
                             liftProgressHeight = *height;
                             liftLastProgress = now;
