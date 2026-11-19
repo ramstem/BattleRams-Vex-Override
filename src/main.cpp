@@ -115,7 +115,10 @@ void opcontrol() {
     constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 5000;
     constexpr std::uint32_t LIFT_BOOST_INTERVAL_MS = 300;
     constexpr double LIFT_PROGRESS_INCHES = 0.10;
-    constexpr int LIFT_MAX_PRESET_POWER = 55;
+    constexpr int LIFT_MAX_UP_POWER = 100;
+    constexpr int LIFT_MAX_DOWN_POWER = 65;
+    constexpr int LIFT_MAX_STALL_BOOST = 55;
+    constexpr double LIFT_POWER_PER_INCH = 18.0;
     constexpr double AUTO_LIFT_CEILING = std::min(
         lift_calibration::MAX_CALIBRATED_HEIGHT_INCHES,
         lift_calibration::MAX_SAFE_HEIGHT_INCHES);
@@ -232,8 +235,9 @@ void opcontrol() {
                     liftTarget.reset();
                     liftMotors.brake();
                 } else {
+                    const int maxPower = error > 0 ? LIFT_MAX_UP_POWER : LIFT_MAX_DOWN_POWER;
                     int power = static_cast<int>(std::clamp(
-                        std::abs(error) * 9.0, 12.0, static_cast<double>(LIFT_MAX_PRESET_POWER)));
+                        std::abs(error) * LIFT_POWER_PER_INCH, 12.0, static_cast<double>(maxPower)));
                     if (error > 0) {
                         // Restore low approach power as soon as the lift moves again.
                         if (*height >= liftProgressHeight + LIFT_PROGRESS_INCHES) {
@@ -243,8 +247,7 @@ void opcontrol() {
                         const auto stalledIntervals = (now - liftLastProgress) / LIFT_BOOST_INTERVAL_MS;
                         if (stalledIntervals > 0) {
                             const int boostFloor = 20 + 10 * static_cast<int>(std::min(stalledIntervals, std::uint32_t{4}));
-                            power = std::clamp(power, std::min(boostFloor, LIFT_MAX_PRESET_POWER),
-                                               LIFT_MAX_PRESET_POWER);
+                            power = std::max(power, std::min(boostFloor, LIFT_MAX_STALL_BOOST));
                         }
                     }
                     if (liftMotors.move(error > 0 ? power : -power) == PROS_ERR) {
