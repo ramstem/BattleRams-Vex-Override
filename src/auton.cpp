@@ -45,7 +45,7 @@ void auto_turn_test() {
     chassis.setPose(0, 0, 0);
     const auto started = pros::millis();
     chassis.turnToHeading(targetHeading, 1500,
-                          {.maxSpeed = 30, .minSpeed = 20, .earlyExitRange = 2.0f}, false);
+                          {.maxSpeed = 30, .minSpeed = 23, .earlyExitRange = 2.0f}, false);
     const auto elapsedMs = pros::millis() - started;
     leftMotors.brake();
     rightMotors.brake();
