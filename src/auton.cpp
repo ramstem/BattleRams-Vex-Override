@@ -45,6 +45,9 @@ void auto_turn_test() {
     constexpr float targetHeading = 90.0f;
     chassis.setPose(0, 0, 0);
     const auto started = pros::millis();
+    // Tested 90-degree clockwise turn from rest: maxSpeed 45, minSpeed 23, earlyExitRange 7.5 degrees.
+    // Three runs finished at 89.6 to 91.1 degrees in 750 to 760 ms of motion time.
+    // Verify the cutoff separately for other turn angles and directions.
     chassis.turnToHeading(targetHeading, 3000,
                           {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false);
     const auto elapsedMs = pros::millis() - started;
