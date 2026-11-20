@@ -39,7 +39,7 @@ void initialize() {
         {"LEFT SIDE", auto_left},
         {"RIGHT SIDE", auto_right},
         {"SKILLS", auto_skills},
-        {"TEST", auto_test},
+        {"PID TEST", auto_test},
         {"DISTANCE TEST", auto_distance_test}
     });
 }

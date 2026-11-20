@@ -37,6 +37,10 @@ bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
                              double wallCoordinate, double maxCorrection = 6.0);
 
 void lift();
+// Blocking scoring move for autonomous or a Brain-screen autonomous test.
+// Presets are numbered 1 through 6. Start the program with the lift zeroed.
+// Returns true after settling at or above the requested height.
+bool moveLiftToPreset(int preset, std::uint32_t timeoutMs = 5000);
 void roller();
 
 void resetLocalization(float x, float y, float theta);
