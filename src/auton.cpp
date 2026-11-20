@@ -24,6 +24,22 @@ void auto_test() {
                 targetY, pose.x, pose.y, pose.theta);
 }
 
+void auto_straight_test() {
+    constexpr int drivePower = 40;
+    constexpr int driveTimeMs = 500;
+    chassis.setPose(0, 0, 0);
+    leftMotors.move(drivePower);
+    rightMotors.move(drivePower);
+    pros::delay(driveTimeMs);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    pros::delay(500);
+    const auto pose = chassis.getPose();
+    std::printf("STRAIGHT TEST: final X=%.2f in, final Y=%.2f in, heading=%.2f deg\n",
+                pose.x, pose.y, pose.theta);
+}
+
 void auto_skills() {
     chassis.setPose(0, 0,0);
     chassis.moveToPoint(0, 24, 3000);
