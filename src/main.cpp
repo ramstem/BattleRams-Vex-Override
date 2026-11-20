@@ -49,7 +49,8 @@ void initialize() {
         {"DO NOTHING", nullptr},
         {"LEFT SIDE", auto_left},
         {"RIGHT SIDE", auto_right},
-        {"SKILLS", auto_skills}
+        {"SKILLS", auto_skills},
+        {"AUTON TEST", auto_starter_test}
     });
 }
 /**
@@ -94,6 +95,7 @@ ASSET(test_txt);
 void autonomous() {
     releaseDriveHold();
     clawMotors.brake();
+    robot_ui::runSelectedAutonomous();
 }
 
 /**
