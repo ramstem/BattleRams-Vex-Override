@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "display.hpp"
 #include "lemlib/chassis/chassis.hpp"
 #include "main.h" // IWYU pragma: export
 #include "robot/auton.h"
@@ -52,6 +53,7 @@ void auto_turn_test() {
 
     pros::delay(500);
     const auto pose = chassis.getPose();
+    robot_ui::recordTurnTestTime(elapsedMs);
     std::printf("TURN TEST: target=%.1f deg, final heading=%.2f deg, motion time=%lu ms\n",
                 targetHeading, pose.theta, static_cast<unsigned long>(elapsedMs));
 }
