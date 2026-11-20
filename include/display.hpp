@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <initializer_list>
 #include <optional>
 
@@ -26,6 +27,7 @@ std::optional<double> readLiftHeightInches();
 bool zeroLiftHeight();
 
 bool isAutonTestRunning();
+void recordTurnTestTime(std::uint32_t elapsedMs);
 void stopRobotAfterAutonTest();
 
 }  // namespace robot_ui
