@@ -114,6 +114,7 @@ void opcontrol() {
     std::uint32_t liftLastProgress = 0;
     double liftProgressHeight = 0.0;
     bool liftPresetButtonsReady = false;
+    bool liftZeroButtonReady = false;
 
     constexpr double LIFT_TOLERANCE_INCHES = 0.4;
     constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 5000;
@@ -156,6 +157,7 @@ void opcontrol() {
             liftTarget.reset();
             liftHoming = false;
             liftPresetButtonsReady = false;
+            liftZeroButtonReady = false;
             if (!autonTestPaused) {
                 rollerMotors.brake();
                 clawMotors.brake();
@@ -196,9 +198,19 @@ void opcontrol() {
         const auto manualDown = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1);
         const auto stepUp = controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP);
         const auto stepDown = controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN);
+        const auto resetZero = controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT);
         const bool liftInputsValid = connection > 0 && connection != PROS_ERR &&
             (manualUp == 0 || manualUp == 1) && (manualDown == 0 || manualDown == 1) &&
-            (stepUp == 0 || stepUp == 1) && (stepDown == 0 || stepDown == 1);
+            (stepUp == 0 || stepUp == 1) && (stepDown == 0 || stepDown == 1) &&
+            (resetZero == 0 || resetZero == 1);
+        const bool liftIdle = liftInputsValid && !manualUp && !manualDown &&
+                              !stepUp && !stepDown && !liftHoming && !liftTarget;
+        if (liftIdle && liftZeroButtonReady && resetZero) {
+            // The driver verifies the carriage is fully down before pressing Left.
+            liftMotors.brake();
+            if (!robot_ui::zeroLiftHeight()) std::puts("Manual lift zero failed: encoder unavailable.");
+        }
+        liftZeroButtonReady = liftIdle && !resetZero;
 
         if (!liftInputsValid || manualUp || manualDown) {
             liftTarget.reset();

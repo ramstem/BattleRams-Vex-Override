@@ -87,8 +87,7 @@ lv_obj_t* liftPositionLabel = nullptr;
 
 // Capture once at program startup, with the lift physically down.
 // A software offset avoids changing the rotation sensor used by future controls.
-std::atomic<std::int32_t> liftStartingPosition{0};
-bool liftZeroValid = false;
+std::atomic<std::int32_t> liftStartingPosition{PROS_ERR};
 int liftZeroError = 0;
 
 lv_obj_t* leftDriveTempLabel = nullptr;
@@ -663,14 +662,13 @@ void initializeLiftReadout() {
     errno = 0;
     const auto position = liftMotorsEnc.get_position();
     liftZeroError = errno;
-    liftZeroValid = position != PROS_ERR;
-    if (liftZeroValid) liftStartingPosition = position;
+    liftStartingPosition.store(position);
 }
 
 void updateLiftPosition() {
     if (liftPositionLabel == nullptr) return;
     char text[64];
-    if (!liftZeroValid) {
+    if (liftStartingPosition.load() == PROS_ERR) {
         // Do not silently zero later: the lift might have moved by then.
         std::snprintf(text, sizeof(text), "LIFT: ZERO ERR %d", liftZeroError);
     } else {
@@ -1041,10 +1039,11 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
 }
 
 std::optional<double> readLiftHeightInches() {
-    if (!liftZeroValid) return std::nullopt;
+    const auto zero = liftStartingPosition.load();
+    if (zero == PROS_ERR) return std::nullopt;
     const auto position = liftMotorsEnc.get_position();
     if (position == PROS_ERR) return std::nullopt;
-    const double revolutions = (static_cast<double>(position) - liftStartingPosition.load()) / 36000.0;
+    const double revolutions = (static_cast<double>(position) - zero) / 36000.0;
     return lift_calibration::heightInches(revolutions);
 }
 
