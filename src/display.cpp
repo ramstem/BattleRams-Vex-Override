@@ -49,7 +49,7 @@ constexpr std::uint32_t COLOR_WARNING = 0xF39C12;
 constexpr std::uint32_t COLOR_HOT = 0xE74C3C;
 constexpr std::uint32_t COLOR_UNKNOWN = 0x8B949E;
 
-constexpr std::size_t MAX_AUTON_BUTTONS = 6;
+constexpr std::size_t MAX_AUTON_BUTTONS = 8;
 constexpr std::uint32_t DISPLAY_REFRESH_MS = 250;
 
 // -----------------------------------------------------------------------------
@@ -954,17 +954,21 @@ void createAutonScreen() {
     autonButtons.reserve(buttonCount);
     autonButtonLabels.reserve(buttonCount);
 
+    const bool compactRows = buttonCount > 6;
+    const int rowSpacing = compactRows ? 33 : 43;
+    const int buttonHeight = compactRows ? 29 : 38;
+
     for (std::size_t i = 0; i < buttonCount; ++i) {
         const int column = static_cast<int>(i % 2);
         const int row = static_cast<int>(i / 2);
         const int x = 10 + column * 235;
-        const int y = 66 + row * 43;
+        const int y = 66 + row * rowSpacing;
 
         autonButtonIndices[i] = i;
 
         lv_obj_t* button = lv_button_create(autonScreen);
         lv_obj_set_pos(button, x, y);
-        lv_obj_set_size(button, 225, 38);
+        lv_obj_set_size(button, 225, buttonHeight);
         styleButton(button, COLOR_CARD);
         lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
 
