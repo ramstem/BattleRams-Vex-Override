@@ -47,15 +47,9 @@ void initialize() {
 
     robot_ui::initialize({
         {"DO NOTHING", nullptr},
-
-        // Replace these function names with your actual routines.
         {"LEFT SIDE", auto_left},
         {"RIGHT SIDE", auto_right},
-        {"SKILLS", auto_skills},
-        {"PID TEST", auto_test},
-        {"STRAIGHT TEST", auto_straight_test},
-        {"DISTANCE TEST", auto_distance_test},
-        {"TURN TEST", auto_turn_test}
+        {"SKILLS", auto_skills}
     });
 }
 /**
