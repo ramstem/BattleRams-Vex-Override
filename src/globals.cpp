@@ -27,9 +27,9 @@ pros::Distance distanceRight(15);
 pros::Rotation liftMotorsEnc(3);
 // tracking wheels
 // horizontal tracking wheel encoder.
-pros::Rotation horizontalEnc(14);
+pros::Rotation horizontalEnc(-14);
 // vertical tracking wheel encoder.
-pros::Rotation verticalEnc(13);
+pros::Rotation verticalEnc(-13);
 // horizontal tracking wheel.
 lemlib::TrackingWheel horizontalTrackingWheel(&horizontalEnc,lemlib::Omniwheel::NEW_2, -2.75);
 // vertical tracking wheel.
