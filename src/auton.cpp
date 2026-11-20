@@ -40,6 +40,19 @@ void auto_straight_test() {
                 pose.x, pose.y, pose.theta);
 }
 
+void auto_turn_test() {
+    constexpr float targetHeading = 20.0f;
+    chassis.setPose(0, 0, 0);
+    chassis.turnToHeading(targetHeading, 1500, {.maxSpeed = 30}, false);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    pros::delay(500);
+    const auto pose = chassis.getPose();
+    std::printf("TURN TEST: target=%.1f deg, final heading=%.2f deg\n",
+                targetHeading, pose.theta);
+}
+
 void auto_skills() {
     chassis.setPose(0, 0,0);
     chassis.moveToPoint(0, 24, 3000);
