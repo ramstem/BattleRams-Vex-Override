@@ -43,14 +43,17 @@ void auto_straight_test() {
 void auto_turn_test() {
     constexpr float targetHeading = 20.0f;
     chassis.setPose(0, 0, 0);
-    chassis.turnToHeading(targetHeading, 1500, {.maxSpeed = 30}, false);
+    const auto started = pros::millis();
+    chassis.turnToHeading(targetHeading, 1500,
+                          {.maxSpeed = 30, .minSpeed = 20, .earlyExitRange = 2.0f}, false);
+    const auto elapsedMs = pros::millis() - started;
     leftMotors.brake();
     rightMotors.brake();
 
     pros::delay(500);
     const auto pose = chassis.getPose();
-    std::printf("TURN TEST: target=%.1f deg, final heading=%.2f deg\n",
-                targetHeading, pose.theta);
+    std::printf("TURN TEST: target=%.1f deg, final heading=%.2f deg, motion time=%lu ms\n",
+                targetHeading, pose.theta, static_cast<unsigned long>(elapsedMs));
 }
 
 void auto_skills() {
