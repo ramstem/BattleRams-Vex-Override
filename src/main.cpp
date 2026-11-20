@@ -41,7 +41,8 @@ void initialize() {
         {"SKILLS", auto_skills},
         {"PID TEST", auto_test},
         {"STRAIGHT TEST", auto_straight_test},
-        {"DISTANCE TEST", auto_distance_test}
+        {"DISTANCE TEST", auto_distance_test},
+        {"TURN TEST", auto_turn_test}
     });
 }
 /**
