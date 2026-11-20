@@ -2,10 +2,13 @@
 
 #include "globals.h"
 #include "main.h"
+#include "lift_calibration.hpp"
+#include "liblvgl/lvgl.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -26,7 +29,7 @@ namespace {
 // lemlib::TrackingWheel horizontalTrackingWheel;
 // pros::MotorGroup leftMotors;
 // pros::MotorGroup rightMotors;
-// pros::MotorGroup intakeMotors;
+// pros::MotorGroup clawMotors;
 // pros::MotorGroup liftMotors;
 //
 // Rename the references in this file if your objects use different names.
@@ -46,7 +49,7 @@ constexpr std::uint32_t COLOR_WARNING = 0xF39C12;
 constexpr std::uint32_t COLOR_HOT = 0xE74C3C;
 constexpr std::uint32_t COLOR_UNKNOWN = 0x8B949E;
 
-constexpr std::size_t MAX_AUTON_BUTTONS = 6;
+constexpr std::size_t MAX_AUTON_BUTTONS = 8;
 constexpr std::uint32_t DISPLAY_REFRESH_MS = 250;
 
 // -----------------------------------------------------------------------------
@@ -56,6 +59,8 @@ constexpr std::uint32_t DISPLAY_REFRESH_MS = 250;
 std::vector<AutonOption> autonOptions;
 std::atomic<std::size_t> selectedAutonIndex{0};
 std::atomic<bool> autonTestRunning{false};
+constexpr std::uint32_t NO_TURN_TEST_TIME = UINT32_MAX;
+std::atomic<std::uint32_t> lastTurnTestTimeMs{NO_TURN_TEST_TIME};
 
 // The LVGL callback sets this immediately before starting the PROS task.
 // Only one test can run at a time, so no second writer is allowed until the
@@ -72,16 +77,24 @@ std::array<std::size_t, MAX_AUTON_BUTTONS> autonButtonIndices{};
 
 lv_obj_t* dashboardScreen = nullptr;
 lv_obj_t* autonScreen = nullptr;
+lv_obj_t* distanceScreen = nullptr;
+std::array<lv_obj_t*, 3> distanceLabels{};
 
 lv_obj_t* statusLabel = nullptr;
 lv_obj_t* batteryLabel = nullptr;
 lv_obj_t* poseLabel = nullptr;
 lv_obj_t* headingLabel = nullptr;
 lv_obj_t* trackingLabel = nullptr;
+lv_obj_t* liftPositionLabel = nullptr;
+
+// Capture once at program startup, with the lift physically down.
+// A software offset avoids changing the rotation sensor used by future controls.
+std::atomic<std::int32_t> liftStartingPosition{PROS_ERR};
+int liftZeroError = 0;
 
 lv_obj_t* leftDriveTempLabel = nullptr;
 lv_obj_t* rightDriveTempLabel = nullptr;
-lv_obj_t* intakeTempLabel = nullptr;
+lv_obj_t* clawTempLabel = nullptr;
 lv_obj_t* liftTempLabel = nullptr;
 
 lv_obj_t* selectedAutonLabel = nullptr;
@@ -100,7 +113,7 @@ void styleScreen(lv_obj_t* screen) {
         LV_PART_MAIN
     );
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 }
 
 lv_obj_t* createCard(
@@ -114,7 +127,7 @@ lv_obj_t* createCard(
 
     lv_obj_set_pos(card, x, y);
     lv_obj_set_size(card, width, height);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_set_style_bg_color(card, lv_color_hex(COLOR_CARD), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
@@ -292,8 +305,9 @@ void stopRobotAfterAutonTest() {
     rightMotors.brake();
 
     // Stop the mechanisms using their existing brake modes.
-    chainLift.move(0);
+    clawMotors.brake();
     liftMotors.move(0);
+    rollerMotors.brake();
 }
 
 void updateSelectedAutonDisplay() {
@@ -399,8 +413,14 @@ void updateAutonButtonStyles() {
     }
 
     if (selectorMessageLabel != nullptr) {
+        const auto turnTimeMs = lastTurnTestTimeMs.load();
         if (autonTestRunning.load()) {
             lv_label_set_text(selectorMessageLabel, "Autonomous test is running");
+        } else if (selectionAllowed && turnTimeMs != NO_TURN_TEST_TIME) {
+            char message[48];
+            std::snprintf(message, sizeof(message), "Last turn time: %lu ms",
+                          static_cast<unsigned long>(turnTimeMs));
+            lv_label_set_text(selectorMessageLabel, message);
         } else if (selectionAllowed) {
             lv_label_set_text(selectorMessageLabel, "Tap a routine to select it");
         } else {
@@ -503,7 +523,7 @@ void showAutonSelectorEvent(lv_event_t* event) {
 
     updateAutonButtonStyles();
 
-    lv_scr_load_anim(
+    lv_screen_load_anim(
         autonScreen,
         LV_SCR_LOAD_ANIM_MOVE_LEFT,
         200,
@@ -517,13 +537,19 @@ void showDashboardEvent(lv_event_t* event) {
         return;
     }
 
-    lv_scr_load_anim(
+    lv_screen_load_anim(
         dashboardScreen,
         LV_SCR_LOAD_ANIM_MOVE_RIGHT,
         200,
         0,
         false
     );
+}
+
+void showDistanceEvent(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        lv_screen_load(distanceScreen);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -590,10 +616,14 @@ void updateOdometryStatus() {
     const lemlib::Pose pose = chassis.getPose();
     const double verticalDistance = verticalTrackingWheel.getDistanceTraveled();
     const double horizontalDistance = horizontalTrackingWheel.getDistanceTraveled();
+    errno = 0;
     const double imuHeading = imu.get_heading();
+    // Capture immediately: subsequent device calls can overwrite errno.
+    const int imuError = errno;
 
     char poseText[80];
     char headingText[96];
+    char imuText[32];
     char trackingText[104];
 
     // Use snprintf rather than lv_label_set_text_fmt for floating-point values.
@@ -605,12 +635,22 @@ void updateOdometryStatus() {
         pose.y
     );
 
+    if (std::isfinite(imuHeading) && imuHeading >= 0.0 && imuHeading < 360.0) {
+        std::snprintf(imuText, sizeof(imuText), "%6.1f deg", imuHeading);
+    } else if (imuError == EAGAIN) {
+        std::snprintf(imuText, sizeof(imuText), "CALIBRATING");
+    } else {
+        // PROS_ERR_F is infinity. Show the actual read failure rather than
+        // presenting it as an angle, or hiding it behind a stale value.
+        std::snprintf(imuText, sizeof(imuText), "ERR %d", imuError);
+    }
+
     std::snprintf(
         headingText,
         sizeof(headingText),
-        "LemLib: %6.1f deg   IMU: %6.1f deg",
+        "LemLib: %6.1f deg   IMU: %s",
         pose.theta,
-        imuHeading
+        imuText
     );
 
     std::snprintf(
@@ -624,6 +664,31 @@ void updateOdometryStatus() {
     lv_label_set_text(poseLabel, poseText);
     lv_label_set_text(headingLabel, headingText);
     lv_label_set_text(trackingLabel, trackingText);
+}
+
+void initializeLiftReadout() {
+    errno = 0;
+    const auto position = liftMotorsEnc.get_position();
+    liftZeroError = errno;
+    liftStartingPosition.store(position);
+}
+
+void updateLiftPosition() {
+    if (liftPositionLabel == nullptr) return;
+    char text[64];
+    if (liftStartingPosition.load() == PROS_ERR) {
+        // Do not silently zero later: the lift might have moved by then.
+        std::snprintf(text, sizeof(text), "LIFT: ZERO ERR %d", liftZeroError);
+    } else {
+        errno = 0;
+        const auto height = readLiftHeightInches();
+        if (height) {
+            std::snprintf(text, sizeof(text), "LIFT: %.2f in", *height);
+        } else {
+            std::snprintf(text, sizeof(text), "LIFT: SENSOR ERR %d", errno);
+        }
+    }
+    lv_label_set_text(liftPositionLabel, text);
 }
 
 void updateMotorTemperatures() {
@@ -640,9 +705,9 @@ void updateMotorTemperatures() {
     );
 
     updateTemperatureLabel(
-        intakeTempLabel,
-        "CHAIN LIFT",
-        chainLift.get_temperature_all()
+        clawTempLabel,
+        "CLAW",
+        clawMotors.get_temperature_all()
     );
 
     updateTemperatureLabel(
@@ -652,11 +717,35 @@ void updateMotorTemperatures() {
     );
 }
 
+void updateDistanceSensors() {
+    const std::array<pros::Distance*, 3> sensors{
+        &distanceFront, &distanceLeft, &distanceRight
+    };
+    for (std::size_t i = 0; i < sensors.size(); ++i) {
+        if (distanceLabels[i] == nullptr) continue;
+        const auto mm = sensors[i]->get();
+        char text[64];
+        if (mm == PROS_ERR) {
+            std::snprintf(text, sizeof(text), "SENSOR ERROR");
+        } else if (mm < 20 || mm > 2000) {
+            // Includes the no-object/out-of-range reading. Never show it as
+            // a usable distance; these readings must not drive an approach.
+            std::snprintf(text, sizeof(text), "NO USABLE RANGE");
+        } else {
+            std::snprintf(text, sizeof(text), "%ld mm / %.1f in",
+                          static_cast<long>(mm), mm / 25.4);
+        }
+        lv_label_set_text(distanceLabels[i], text);
+    }
+}
+
 void dashboardUpdateTimer(lv_timer_t*) {
     updateCompetitionStatus();
     updateBatteryStatus();
     updateOdometryStatus();
+    updateLiftPosition();
     updateMotorTemperatures();
+    updateDistanceSensors();
     updateSelectedAutonDisplay();
     updateAutonButtonStyles();
 }
@@ -690,21 +779,25 @@ void createDashboardScreen() {
         COLOR_ACCENT
     );
 
-    poseLabel = createLabel(odometryCard, "X: --   Y: --", 10, 38, 245);
+    poseLabel = createLabel(odometryCard, "X: --   Y: --", 10, 34, 245);
     headingLabel = createLabel(
         odometryCard,
         "LemLib: --   IMU: --",
         10,
-        69,
+        58,
         245
     );
     trackingLabel = createLabel(
         odometryCard,
         "Vertical: --   Horizontal: --",
         10,
-        100,
+        82,
         245,
         COLOR_MUTED
+    );
+
+    liftPositionLabel = createLabel(
+        odometryCard, "LIFT: --", 10, 106, 245, COLOR_ACCENT
     );
 
     lv_obj_t* temperatureCard = createCard(dashboardScreen, 275, 43, 200, 137);
@@ -732,9 +825,9 @@ void createDashboardScreen() {
         58,
         180
     );
-    intakeTempLabel = createLabel(
+    clawTempLabel = createLabel(
         temperatureCard,
-        "INTAKE: --",
+        "CLAW: --",
         10,
         82,
         180
@@ -747,15 +840,15 @@ void createDashboardScreen() {
         180
     );
 
-    lv_obj_t* autonButton = lv_btn_create(dashboardScreen);
+    lv_obj_t* autonButton = lv_button_create(dashboardScreen);
     lv_obj_set_pos(autonButton, 5, 186);
-    lv_obj_set_size(autonButton, 470, 48);
+    lv_obj_set_size(autonButton, 310, 48);
     styleButton(autonButton, COLOR_ACCENT);
 
     selectedAutonLabel = lv_label_create(autonButton);
     lv_label_set_text(selectedAutonLabel, "AUTON: NONE");
     lv_label_set_long_mode(selectedAutonLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_width(selectedAutonLabel, 440);
+    lv_obj_set_width(selectedAutonLabel, 290);
     lv_obj_set_style_text_align(selectedAutonLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_color(
         selectedAutonLabel,
@@ -770,6 +863,46 @@ void createDashboardScreen() {
         LV_EVENT_CLICKED,
         nullptr
     );
+
+    lv_obj_t* distanceButton = lv_button_create(dashboardScreen);
+    lv_obj_set_pos(distanceButton, 320, 186);
+    lv_obj_set_size(distanceButton, 155, 48);
+    styleButton(distanceButton, COLOR_CARD);
+    lv_obj_t* distanceLabel = lv_label_create(distanceButton);
+    lv_label_set_text(distanceLabel, "DISTANCE");
+    lv_obj_set_style_text_color(distanceLabel, lv_color_hex(COLOR_TEXT), LV_PART_MAIN);
+    lv_obj_align(distanceLabel, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_event_cb(distanceButton, showDistanceEvent, LV_EVENT_CLICKED, nullptr);
+}
+
+void createDistanceScreen() {
+    distanceScreen = lv_obj_create(nullptr);
+    styleScreen(distanceScreen);
+    lv_obj_t* header = createCard(distanceScreen, 5, 4, 470, 38);
+    lv_obj_t* back = lv_button_create(header);
+    lv_obj_set_pos(back, 5, 4);
+    lv_obj_set_size(back, 80, 30);
+    styleButton(back, COLOR_BORDER);
+    lv_obj_t* backLabel = lv_label_create(back);
+    lv_label_set_text(backLabel, "< BACK");
+    lv_obj_set_style_text_color(backLabel, lv_color_hex(COLOR_TEXT), LV_PART_MAIN);
+    lv_obj_align(backLabel, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_event_cb(back, showDashboardEvent, LV_EVENT_CLICKED, nullptr);
+    createLabel(header, "DISTANCE SENSORS", 110, 10, 340, COLOR_ACCENT);
+
+    const std::array<const char*, 3> names{"FRONT", "LEFT", "RIGHT"};
+    const std::array<unsigned, 3> ports{
+        distanceFront.get_port(), distanceLeft.get_port(), distanceRight.get_port()
+    };
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        lv_obj_t* card = createCard(distanceScreen, 5, 49 + 53 * i, 470, 47);
+        char title[32];
+        std::snprintf(title, sizeof(title), "%s / PORT %u", names[i], ports[i]);
+        createLabel(card, title, 10, 14, 175, COLOR_MUTED);
+        distanceLabels[i] = createLabel(card, "--", 190, 14, 270);
+    }
+    createLabel(distanceScreen, "Measured from sensor face. Display only.",
+                10, 215, 460, COLOR_MUTED);
 }
 
 void createAutonScreen() {
@@ -778,7 +911,7 @@ void createAutonScreen() {
 
     lv_obj_t* header = createCard(autonScreen, 5, 4, 470, 38);
 
-    lv_obj_t* backButton = lv_btn_create(header);
+    lv_obj_t* backButton = lv_button_create(header);
     lv_obj_set_pos(backButton, 5, 4);
     lv_obj_set_size(backButton, 80, 30);
     styleButton(backButton, COLOR_BORDER);
@@ -829,17 +962,21 @@ void createAutonScreen() {
     autonButtons.reserve(buttonCount);
     autonButtonLabels.reserve(buttonCount);
 
+    const bool compactRows = buttonCount > 6;
+    const int rowSpacing = compactRows ? 33 : 43;
+    const int buttonHeight = compactRows ? 29 : 38;
+
     for (std::size_t i = 0; i < buttonCount; ++i) {
         const int column = static_cast<int>(i % 2);
         const int row = static_cast<int>(i / 2);
         const int x = 10 + column * 235;
-        const int y = 66 + row * 43;
+        const int y = 66 + row * rowSpacing;
 
         autonButtonIndices[i] = i;
 
-        lv_obj_t* button = lv_btn_create(autonScreen);
+        lv_obj_t* button = lv_button_create(autonScreen);
         lv_obj_set_pos(button, x, y);
-        lv_obj_set_size(button, 225, 38);
+        lv_obj_set_size(button, 225, buttonHeight);
         styleButton(button, COLOR_CARD);
         lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
 
@@ -861,7 +998,7 @@ void createAutonScreen() {
         autonButtonLabels.push_back(label);
     }
 
-    runAutonButton = lv_btn_create(autonScreen);
+    runAutonButton = lv_button_create(autonScreen);
     lv_obj_set_pos(runAutonButton, 10, 199);
     lv_obj_set_size(runAutonButton, 460, 36);
     styleButton(runAutonButton, COLOR_ACCENT);
@@ -897,16 +1034,37 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
     autonOptions.assign(autonomousRoutines.begin(), autonomousRoutines.end());
     selectedAutonIndex.store(0);
     autonTestRunning.store(false);
+    lastTurnTestTimeMs.store(NO_TURN_TEST_TIME);
     autonTestRoutine = nullptr;
 
+    initializeLiftReadout();
     createDashboardScreen();
     createAutonScreen();
+    createDistanceScreen();
 
     updateSelectedAutonDisplay();
     updateAutonButtonStyles();
 
-    lv_scr_load(dashboardScreen);
+    updateDistanceSensors();
+    updateLiftPosition();
+    lv_screen_load(dashboardScreen);
     lv_timer_create(dashboardUpdateTimer, DISPLAY_REFRESH_MS, nullptr);
+}
+
+std::optional<double> readLiftHeightInches() {
+    const auto zero = liftStartingPosition.load();
+    if (zero == PROS_ERR) return std::nullopt;
+    const auto position = liftMotorsEnc.get_position();
+    if (position == PROS_ERR) return std::nullopt;
+    const double revolutions = (static_cast<double>(position) - zero) / 36000.0;
+    return lift_calibration::heightInches(revolutions);
+}
+
+bool zeroLiftHeight() {
+    const auto position = liftMotorsEnc.get_position();
+    if (position == PROS_ERR) return false;
+    liftStartingPosition.store(position);
+    return true;
 }
 
 void runSelectedAutonomous() {
@@ -927,6 +1085,10 @@ const char* getSelectedAutonomousName() {
 
 bool isAutonTestRunning() {
     return autonTestRunning.load();
+}
+
+void recordTurnTestTime(std::uint32_t elapsedMs) {
+    lastTurnTestTimeMs.store(elapsedMs);
 }
 
 }  // namespace robot_ui

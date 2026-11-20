@@ -2,7 +2,7 @@
 #include "lemlib/chassis/trackingWheel.hpp"
 #include "pros/misc.h"
 #include "pros/motor_group.hpp"
-#include "pros/optical.hpp"
+#include "pros/distance.hpp"
 #include <cstdio>
 
 using namespace lemlib;
@@ -10,32 +10,26 @@ using namespace lemlib;
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 // motor groups
-pros::MotorGroup leftMotors({-14,-19}, pros::MotorGears::blue); // left motor group
-pros::MotorGroup rightMotors({11, 12}, pros::MotorGears::blue); // right motor group
-pros::MotorGroup chainLift({ -2,9}, pros::MotorGears::green); // intake motor group
-pros::MotorGroup liftMotors({3, -8}, pros::MotorGears::green); // lift motor group
-pros::MotorGroup rollerMotors({1}, pros::MotorGears::blue); // roller motor group
-
-//color sensor
-pros::Optical colorSensor(7);
+pros::MotorGroup leftMotors({-1, -2}, pros::MotorGears::blue);
+pros::MotorGroup rightMotors({9, 10}, pros::MotorGears::blue);
+pros::MotorGroup liftMotors({4, -6, 5, -7}, pros::MotorGears::green);
+pros::MotorGroup rollerMotors({19}, pros::MotorGears::blue);
+pros::MotorGroup clawMotors({-12}, pros::MotorGears::green);
 
 //Inertial Sensor
-pros::Imu imu(15);
+pros::Imu imu(20);
 
-//Pneumatics
-pros::adi::Pneumatics Claw('A',false,false);
-//Distance Sensors
-//pros::Distance dNorth(10);
-//pros::Distance dSouth(14);
-//pros::Distance dEast(0);
-//pros::Distance dWest(0);
-pros::Rotation chainLiftEnc(5);
-pros::Rotation liftMotorsEnc(4);
+// Distance sensors: directions are relative to the robot.
+pros::Distance distanceFront(17);
+pros::Distance distanceLeft(16);
+pros::Distance distanceRight(15);
+
+pros::Rotation liftMotorsEnc(3);
 // tracking wheels
 // horizontal tracking wheel encoder.
-pros::Rotation horizontalEnc(20);
+pros::Rotation horizontalEnc(-14);
 // vertical tracking wheel encoder.
-pros::Rotation verticalEnc(17);
+pros::Rotation verticalEnc(-13);
 // horizontal tracking wheel.
 lemlib::TrackingWheel horizontalTrackingWheel(&horizontalEnc,lemlib::Omniwheel::NEW_2, -2.75);
 // vertical tracking wheel.
@@ -97,5 +91,3 @@ lemlib::ExpoDriveCurve steerCurve(3, // joystick deadband out of 127
 
 // create the chassis
 lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
-
-//Pneumatics
