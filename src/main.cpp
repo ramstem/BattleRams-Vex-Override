@@ -190,29 +190,38 @@ void opcontrol() {
         }
         autonTestPaused = false;
 
+        const bool controllerConnected = connection > 0 && connection != PROS_ERR;
+        const int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+        const int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+        const bool driveSticksValid = controllerConnected &&
+                                     leftY >= -127 && leftY <= 127 &&
+                                     rightX >= -127 && rightX <= 127;
         const auto holdButton = controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT);
-        const bool holdInputValid = connection > 0 && connection != PROS_ERR &&
+        const bool holdInputValid = controllerConnected &&
                                     (holdButton == 0 || holdButton == 1);
-        if (holdInputValid && driveHoldButtonReady && holdButton == 1) {
-            if (driveBrakeBeforeHold.load() == pros::MotorBrake::invalid) {
-                const auto mode = leftMotors.get_brake_mode();
-                driveBrakeBeforeHold.store(mode == pros::MotorBrake::invalid
-                                               ? pros::MotorBrake::coast
-                                               : mode);
-                leftMotors.set_brake_mode_all(pros::MotorBrake::hold);
-                rightMotors.set_brake_mode_all(pros::MotorBrake::hold);
-                leftMotors.brake();
-                rightMotors.brake();
-            } else {
-                releaseDriveHold();
-            }
-        }
+        const bool holdButtonPressed = holdInputValid && driveHoldButtonReady && holdButton == 1;
         driveHoldButtonReady = holdInputValid && holdButton == 0;
 
+        const bool driveHoldActive = driveBrakeBeforeHold.load() != pros::MotorBrake::invalid;
+        // Use the same deadbands as arcade drive so stick noise cannot release HOLD.
+        const bool driveRequested = (driveHoldActive || holdButtonPressed) && driveSticksValid &&
+                                    (throttleCurve.curve(leftY) != 0.0f ||
+                                     steerCurve.curve(rightX) != 0.0f);
+        if (driveHoldActive && (driveRequested || holdButtonPressed)) {
+            releaseDriveHold();
+        } else if (!driveHoldActive && holdButtonPressed && !driveRequested) {
+            const auto mode = leftMotors.get_brake_mode();
+            driveBrakeBeforeHold.store(mode == pros::MotorBrake::invalid
+                                           ? pros::MotorBrake::coast
+                                           : mode);
+            leftMotors.set_brake_mode_all(pros::MotorBrake::hold);
+            rightMotors.set_brake_mode_all(pros::MotorBrake::hold);
+            leftMotors.brake();
+            rightMotors.brake();
+        }
+
         if (driveBrakeBeforeHold.load() == pros::MotorBrake::invalid) {
-            const int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-            const int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-            chassis.arcade(leftY, rightX);
+            chassis.arcade(driveSticksValid ? leftY : 0, driveSticksValid ? rightX : 0);
         }
 
         // The optical sensor has been removed. Keep manual roller control.
