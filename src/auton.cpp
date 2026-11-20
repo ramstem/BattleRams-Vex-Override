@@ -4,11 +4,79 @@
 #include "main.h" // IWYU pragma: export
 #include "robot/auton.h"
 #include "functions.h"
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 #include <string>
 
 using namespace lemlib;
+
+// Start at (0, 0) facing +Y, with a zeroed lift and clear space for the route.
+// Coordinates are inches from the starting pose. Heading increases clockwise.
+void auto_starter_test() {
+    constexpr float firstY = 24.0f;
+    constexpr float approachX = 12.0f;
+    constexpr float turnHeading = 90.0f;
+    constexpr float positionTolerance = 2.0f;
+    constexpr float headingTolerance = 2.0f;
+
+    const auto reachedPoint = [](float x, float y) {
+        const auto pose = chassis.getPose();
+        return std::hypot(pose.x - x, pose.y - y) <= positionTolerance;
+    };
+
+    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_BRAKE);
+    chassis.setPose(0, 0, 0);
+
+    // Blocking 24-inch drive using the tested straight-drive speed cap.
+    chassis.moveToPoint(0, firstY, 4000, {.maxSpeed = 45}, false);
+    pros::delay(150);
+    if (!reachedPoint(0, firstY)) {
+        std::puts("AUTON TEST: first drive missed its target");
+        return;
+    }
+
+    // Wall checkpoint 1: after coming to rest at heading 0, the front sensor
+    // can correct Y against a measured wall perpendicular to +Y.
+    // correctPositionFromWall(WallSensor::Front, WallAxis::Y, measuredWallY);
+
+    // Tested from rest for a 90-degree clockwise turn. The early exit lets
+    // the chassis settle near 90 degrees before the next move.
+    chassis.turnToHeading(turnHeading, 3000,
+                          {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false);
+    leftMotors.brake();
+    rightMotors.brake();
+    pros::delay(500);
+    const double headingError = std::remainder(chassis.getPose().theta - turnHeading, 360.0);
+    if (!(std::abs(headingError) <= headingTolerance)) {
+        std::puts("AUTON TEST: turn missed its target");
+        return;
+    }
+
+    // Wall checkpoint 2: at rest facing +X, the front sensor can correct X.
+    // correctPositionFromWall(WallSensor::Front, WallAxis::X, measuredWallX);
+    // Use measured wall coordinates in this starting-pose frame and a clear
+    // view of the wall. If correction returns false, the odometry pose is kept.
+
+    chassis.moveToPoint(approachX, firstY, 2000, {.maxSpeed = 35}, false);
+    pros::delay(150);
+    if (!reachedPoint(approachX, firstY)) {
+        std::puts("AUTON TEST: approach missed its target");
+        return;
+    }
+
+    // For an approach based on standoff, use driveToDistance() instead of the
+    // last move once the front target is verified. It stops at a distance from
+    // the sensor face. Use a separate wall checkpoint to update odometry.
+
+    // Raise to preset 1 (10 inches) at rest. Check the result before adding
+    // a scoring action. The lift holds at the preset when the test ends.
+    if (!moveLiftToPreset(1, 3000)) {
+        std::puts("AUTON TEST: lift did not reach preset 1");
+        return;
+    }
+    std::puts("AUTON TEST: drive, turn, approach, and lift completed");
+}
 
 void auto_distance_test() {
     const bool reached = driveToDistance(6.0, 40, 3000);
