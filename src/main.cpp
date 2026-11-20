@@ -258,7 +258,12 @@ void opcontrol() {
             if (liftHoming) {
                 if (!homeHeightValid || now - liftMoveStarted >= LIFT_MOVE_TIMEOUT_MS) {
                     liftHoming = false;
-                    std::puts("Lift home stopped before confirming bottom.");
+                    if (height) {
+                        const char* reason = homeHeightValid ? "travel timeout" : "outside homing range";
+                        std::printf("Lift home: %s at %.2f in. Zero kept.\n", reason, *height);
+                    } else {
+                        std::puts("Lift home: encoder reading unavailable. Zero kept.");
+                    }
                 } else if (*height > HOME_PROBE_HEIGHT && !liftHomeProbeStarted) {
                     const int power = static_cast<int>(std::clamp(
                         *height * LIFT_POWER_PER_INCH, static_cast<double>(HOME_PROBE_POWER),
@@ -277,11 +282,16 @@ void opcontrol() {
                     // Without a bottom switch, infer contact only near the old zero.
                     if (*height <= HOME_MAX_ZERO_HEIGHT && now - liftLastProgress >= HOME_STILL_MS) {
                         liftMotors.brake();
-                        if (!robot_ui::zeroLiftHeight()) std::puts("Lift home encoder reset failed.");
+                        if (robot_ui::zeroLiftHeight()) {
+                            std::printf("Lift home: zero reset from %.2f in.\n", *height);
+                        } else {
+                            std::puts("Lift home: encoder reset failed. Zero kept.");
+                        }
                         liftHoming = false;
                     } else if (now - *liftHomeProbeStarted >= HOME_PROBE_TIMEOUT_MS) {
                         liftHoming = false;
-                        std::puts("Lift home could not confirm bottom near zero.");
+                        std::printf("Lift home: probe timed out at %.2f in, last motion %.2f in. Zero kept.\n",
+                                    *height, *height - liftProgressHeight);
                     } else {
                         liftHoming = liftMotors.move(-HOME_PROBE_POWER) != PROS_ERR;
                     }
