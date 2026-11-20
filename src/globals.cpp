@@ -10,8 +10,8 @@ using namespace lemlib;
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 // motor groups
-pros::MotorGroup leftMotors({9, 10}, pros::MotorGears::blue);
-pros::MotorGroup rightMotors({-1, -2}, pros::MotorGears::blue);
+pros::MotorGroup leftMotors({-1, -2}, pros::MotorGears::blue);
+pros::MotorGroup rightMotors({9, 10}, pros::MotorGears::blue);
 pros::MotorGroup liftMotors({4, -6, 5, -7}, pros::MotorGears::green);
 pros::MotorGroup rollerMotors({19}, pros::MotorGears::blue);
 pros::MotorGroup clawMotors({-12}, pros::MotorGears::green);
