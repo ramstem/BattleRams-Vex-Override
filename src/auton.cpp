@@ -41,10 +41,10 @@ void auto_straight_test() {
 }
 
 void auto_turn_test() {
-    constexpr float targetHeading = 20.0f;
+    constexpr float targetHeading = 90.0f;
     chassis.setPose(0, 0, 0);
     const auto started = pros::millis();
-    chassis.turnToHeading(targetHeading, 1500,
+    chassis.turnToHeading(targetHeading, 3000,
                           {.maxSpeed = 30, .minSpeed = 23, .earlyExitRange = 2.0f}, false);
     const auto elapsedMs = pros::millis() - started;
     leftMotors.brake();
