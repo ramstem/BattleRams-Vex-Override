@@ -171,7 +171,7 @@ void opcontrol() {
         autonTestPaused = false;
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        chassis.arcade(leftY, -rightX);
+        chassis.arcade(leftY, rightX);
 
         // The optical sensor has been removed. Keep manual roller control.
         // Down is now unassigned; there is no automatic color/drive-hold mode.
