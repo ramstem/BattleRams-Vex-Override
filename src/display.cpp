@@ -59,6 +59,8 @@ constexpr std::uint32_t DISPLAY_REFRESH_MS = 250;
 std::vector<AutonOption> autonOptions;
 std::atomic<std::size_t> selectedAutonIndex{0};
 std::atomic<bool> autonTestRunning{false};
+constexpr std::uint32_t NO_TURN_TEST_TIME = UINT32_MAX;
+std::atomic<std::uint32_t> lastTurnTestTimeMs{NO_TURN_TEST_TIME};
 
 // The LVGL callback sets this immediately before starting the PROS task.
 // Only one test can run at a time, so no second writer is allowed until the
@@ -411,8 +413,14 @@ void updateAutonButtonStyles() {
     }
 
     if (selectorMessageLabel != nullptr) {
+        const auto turnTimeMs = lastTurnTestTimeMs.load();
         if (autonTestRunning.load()) {
             lv_label_set_text(selectorMessageLabel, "Autonomous test is running");
+        } else if (selectionAllowed && turnTimeMs != NO_TURN_TEST_TIME) {
+            char message[48];
+            std::snprintf(message, sizeof(message), "Last turn time: %lu ms",
+                          static_cast<unsigned long>(turnTimeMs));
+            lv_label_set_text(selectorMessageLabel, message);
         } else if (selectionAllowed) {
             lv_label_set_text(selectorMessageLabel, "Tap a routine to select it");
         } else {
@@ -1026,6 +1034,7 @@ void initialize(std::initializer_list<AutonOption> autonomousRoutines) {
     autonOptions.assign(autonomousRoutines.begin(), autonomousRoutines.end());
     selectedAutonIndex.store(0);
     autonTestRunning.store(false);
+    lastTurnTestTimeMs.store(NO_TURN_TEST_TIME);
     autonTestRoutine = nullptr;
 
     initializeLiftReadout();
@@ -1076,6 +1085,10 @@ const char* getSelectedAutonomousName() {
 
 bool isAutonTestRunning() {
     return autonTestRunning.load();
+}
+
+void recordTurnTestTime(std::uint32_t elapsedMs) {
+    lastTurnTestTimeMs.store(elapsedMs);
 }
 
 }  // namespace robot_ui
