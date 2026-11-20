@@ -11,6 +11,7 @@
 #include "pros/misc.h"
 #include "pros/rtos.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -20,6 +21,18 @@
 using namespace lemlib;
 
 std::string team_number = "6079B";
+
+namespace {
+std::atomic<pros::MotorBrake> driveBrakeBeforeHold{pros::MotorBrake::invalid};
+
+void releaseDriveHold() {
+    const auto mode = driveBrakeBeforeHold.exchange(pros::MotorBrake::invalid);
+    if (mode == pros::MotorBrake::invalid) return;
+
+    leftMotors.set_brake_mode_all(mode);
+    rightMotors.set_brake_mode_all(mode);
+}
+}
 
 void initialize() {
 // Initialize the Brain screen.
@@ -51,6 +64,7 @@ void initialize() {
  * the robot is enabled, this task will exit.
  */
 void disabled() {
+    releaseDriveHold();
     liftMotors.brake();
     rollerMotors.brake();
     clawMotors.brake();
@@ -84,6 +98,7 @@ void competition_initialize() {
 ASSET(test_txt);
 
 void autonomous() {
+    releaseDriveHold();
     clawMotors.brake();
 }
 
@@ -101,12 +116,14 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+    releaseDriveHold();
     rollerMotors.brake();
     clawMotors.brake();
     ClawToggle clawToggle;
     bool clawControlsArmed = false;
     bool clawMotorErrorReported = false;
     bool autonTestPaused = false;
+    bool driveHoldButtonReady = false;
     std::optional<double> liftTarget;
     bool liftHoming = false;
     std::optional<std::uint32_t> liftHomeProbeStarted;
@@ -160,7 +177,10 @@ void opcontrol() {
             liftHoming = false;
             liftPresetButtonsReady = false;
             liftZeroButtonReady = false;
+            driveHoldButtonReady = false;
             if (!autonTestPaused) {
+                // The Brain test manages drivetrain braking independently.
+                driveBrakeBeforeHold.store(pros::MotorBrake::invalid);
                 rollerMotors.brake();
                 clawMotors.brake();
                 autonTestPaused = true;
@@ -169,12 +189,33 @@ void opcontrol() {
             continue;
         }
         autonTestPaused = false;
-        int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-        int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        chassis.arcade(leftY, rightX);
+
+        const auto holdButton = controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT);
+        const bool holdInputValid = connection > 0 && connection != PROS_ERR &&
+                                    (holdButton == 0 || holdButton == 1);
+        if (holdInputValid && driveHoldButtonReady && holdButton == 1) {
+            if (driveBrakeBeforeHold.load() == pros::MotorBrake::invalid) {
+                const auto mode = leftMotors.get_brake_mode();
+                driveBrakeBeforeHold.store(mode == pros::MotorBrake::invalid
+                                               ? pros::MotorBrake::coast
+                                               : mode);
+                leftMotors.set_brake_mode_all(pros::MotorBrake::hold);
+                rightMotors.set_brake_mode_all(pros::MotorBrake::hold);
+                leftMotors.brake();
+                rightMotors.brake();
+            } else {
+                releaseDriveHold();
+            }
+        }
+        driveHoldButtonReady = holdInputValid && holdButton == 0;
+
+        if (driveBrakeBeforeHold.load() == pros::MotorBrake::invalid) {
+            const int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+            const int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+            chassis.arcade(leftY, rightX);
+        }
 
         // The optical sensor has been removed. Keep manual roller control.
-        // Down is now unassigned; there is no automatic color/drive-hold mode.
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
             rollerMotors.move(-127);
         } else {
