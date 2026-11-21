@@ -9,7 +9,7 @@ bin/globals.cpp.o: src/globals.cpp include/lemlib/chassis/chassis.hpp \
  include/pros/rotation.hpp include/pros/rotation.h \
  include/lemlib/pose.hpp include/lemlib/pid.hpp \
  include/lemlib/exitcondition.hpp include/lemlib/driveCurve.hpp \
- include/pros/optical.hpp include/pros/optical.h include/pros/error.h
+ include/pros/distance.hpp include/pros/distance.h
 include/lemlib/chassis/chassis.hpp:
 include/pros/rtos.hpp:
 include/pros/rtos.h:
@@ -34,6 +34,5 @@ include/lemlib/pose.hpp:
 include/lemlib/pid.hpp:
 include/lemlib/exitcondition.hpp:
 include/lemlib/driveCurve.hpp:
-include/pros/optical.hpp:
-include/pros/optical.h:
-include/pros/error.h:
+include/pros/distance.hpp:
+include/pros/distance.h:

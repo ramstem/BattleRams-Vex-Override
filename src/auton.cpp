@@ -13,7 +13,23 @@ using namespace lemlib;
 
 // Start at (0, 0) facing +Y, with a zeroed lift and clear space for the route.
 // Coordinates are inches from the starting pose. Heading increases clockwise.
+//write my auton here
 void auto_starter_test() {
+
+    chassis.setPose(0, 0, 0);
+    chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true);
+    moveLiftToPreset(1, 500);
+    chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false);
+    chassis.moveToPoint(25,-17, 1000, {.forwards=false}, false);
+    liftMotors.move(-127);
+    pros::delay(300);
+    liftMotors.brake();
+    pros::delay(500);
+    clawMotors.move(127);
+
+    
+    
+/*
     constexpr float firstY = 24.0f;
     constexpr float approachX = 12.0f;
     constexpr float turnHeading = 90.0f;
@@ -75,7 +91,7 @@ void auto_starter_test() {
         std::puts("AUTON TEST: lift did not reach preset 1");
         return;
     }
-    std::puts("AUTON TEST: drive, turn, approach, and lift completed");
+    std::puts("AUTON TEST: drive, turn, approach, and lift completed"); */
 }
 
 void auto_distance_test() {

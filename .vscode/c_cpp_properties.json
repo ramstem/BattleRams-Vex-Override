@@ -5,14 +5,15 @@
       "includePath": [
         "${workspaceFolder}/**",
         "/Users/austin/Documents/ProS/BattleRams-Override-Vex/include",
-        "/Users/alanc/Documents/VEX/BattleRams-Vex-Override/include"
+        "/Users/alanc/Documents/VEX/BattleRams-Vex-Override/include",
+        "/Users/austin/Documents/VEX/BattleRams-Vex-Override/include"
       ],
       "defines": [
         "_DEBUG",
         "UNICODE",
         "_UNICODE"
       ],
-      "compilerPath": "/Users/alanc/Library/Application Support/Code/User/globalStorage/sigbots.pros/install/pros-toolchain-macos/bin/arm-none-eabi-g++",
+      "compilerPath": "/Users/austin/Library/Application Support/Code/User/globalStorage/sigbots.pros/install/pros-toolchain-macos/bin/arm-none-eabi-g++",
       "cStandard": "gnu11",
       "cppStandard": "gnu++20",
       "intelliSenseMode": "gcc-arm",
@@ -21,7 +22,7 @@
       ],
       "browse": {
         "path": [
-          "/Users/alanc/Documents/VEX/BattleRams-Vex-Override"
+          "/Users/austin/Documents/VEX/BattleRams-Vex-Override"
         ],
         "limitSymbolsToIncludedHeaders": true,
         "databaseFilename": ""
