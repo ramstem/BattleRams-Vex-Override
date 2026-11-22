@@ -17,15 +17,52 @@ using namespace lemlib;
 void auto_starter_test() {
 
     chassis.setPose(0, 0, 0);
-    chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true);
+    chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true); //back away from wall
     moveLiftToPreset(1, 500);
-    chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false);
-    chassis.moveToPoint(25,-17, 1000, {.forwards=false}, false);
+    chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false); //turn to goal
+    chassis.moveToPoint(25,-17, 1000, {.forwards=false}, false); //drive to goal
     liftMotors.move(-127);
-    pros::delay(300);
-    liftMotors.brake();
     pros::delay(500);
+    liftMotors.brake();
+    clawMotors.move(-127); //score
+    pros::delay(500);
+    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
     clawMotors.move(127);
+    chassis.turnToHeading(180, 1000); // turn to matchload
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
+    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away 
+    liftMotors.move(127);
+    pros::delay(750);
+    liftMotors.brake();
+    chassis.turnToHeading(270, 1000); // turn to goal
+    chassis.moveToPoint(23,-17, 1000, {.forwards=false}, false); //drive to goal
+    liftMotors.move(-127); //score
+    pros::delay(750);
+    liftMotors.brake();
+    clawMotors.move(-127); //score
+    chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
+    chassis.turnToHeading(180, 1000,{},true); // turn to matchload
+    clawMotors.move(127);
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
+    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
+    liftMotors.move(127);
+    pros::delay(1250);
+    liftMotors.brake();
+    chassis.turnToHeading(270, 1000); // turn to goal
+    chassis.moveToPoint(23,-17, 300, {.forwards=false}, false); //drive to goal
+     chassis.moveToPoint(23,-17, 500, {.forwards=false,.minSpeed=40}, false); //drive to goal
+    liftMotors.move(-127);
+    pros::delay(500);
+    liftMotors.brake();
+    clawMotors.move(-127);
+    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
+    chassis.turnToHeading(180, 1000); // turn to matchload
+    clawMotors.move(127);
+
+
+    pros::delay(500);
 
     
     
