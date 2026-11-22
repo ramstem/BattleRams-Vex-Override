@@ -4,12 +4,9 @@
 #include "main.h" // IWYU pragma: export
 #include "robot/auton.h"
 #include "functions.h"
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
-#include <optional>
 #include <string>
 
 using namespace lemlib;
@@ -20,38 +17,6 @@ using namespace lemlib;
 void auto_starter_test() {
 
     chassis.setPose(0, 0, 0);
-    // Capture the wall with the robot stopped at its starting pose, facing +Y.
-    // The left sensor face is 5 inches left of the robot center.
-    const auto matchloadWallX = []() -> std::optional<double> {
-        constexpr double sideSensorOffset = 5.0;
-        std::array<int, 7> readingsMm{};
-        for (std::size_t i = 0; i < readingsMm.size(); ++i) {
-            const auto mm = distanceLeft.get();
-            if (mm < 20 || mm > 2000) return std::nullopt;
-            readingsMm[i] = mm;
-            if (i + 1 < readingsMm.size()) pros::delay(20);
-        }
-        std::sort(readingsMm.begin(), readingsMm.end());
-        if (readingsMm.back() - readingsMm.front() > 12.7) return std::nullopt;
-        return -(sideSensorOffset + readingsMm[readingsMm.size() / 2] / 25.4);
-    }();
-    if (!matchloadWallX) {
-        std::puts("Matchload: startup wall reading rejected. Using odometry.");
-    }
-
-    const auto returnToMatchloader = [&] {
-        chassis.turnToHeading(180, 1000, {}, false);
-        // At 180 degrees the same wall is on the right. Correct X before
-        // the reverse approach. The wall reading does not determine Y.
-        if (matchloadWallX) {
-            pros::delay(100);
-            if (!correctPositionFromWall(WallSensor::Right, WallAxis::X, *matchloadWallX)) {
-                std::puts("Matchload: right wall correction rejected. Using odometry.");
-            }
-        }
-        chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
-    };
-
     chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true); //back away from wall
     moveLiftToPreset(1, 500);
     chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false); //turn to goal
@@ -63,7 +28,9 @@ void auto_starter_test() {
     pros::delay(500);
     chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
     clawMotors.move(127);
-    returnToMatchloader();
+    chassis.turnToHeading(180, 1000); // turn to matchload
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away 
     liftMotors.move(127);
     pros::delay(750);
@@ -75,8 +42,10 @@ void auto_starter_test() {
     liftMotors.brake();
     clawMotors.move(-127); //score
     chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
+    chassis.turnToHeading(180, 1000,{},true); // turn to matchload
     clawMotors.move(127);
-    returnToMatchloader();
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
     liftMotors.move(127);
     pros::delay(1250);
