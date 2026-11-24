@@ -159,7 +159,7 @@ void auto_distance_test() {
 
     constexpr float returnHeading = 0.0f;
     constexpr float forwardInches = 24.0f;
-    constexpr float rightInches = 12.0f;
+    constexpr float leftX = -12.0f;
     constexpr float driveSpeed = 45.0f;
     constexpr double maxCorrection = 6.0;
     constexpr double finalGapTolerance = 0.75;
@@ -178,8 +178,8 @@ void auto_distance_test() {
     std::printf("Distance-Test: start left=%.2f in, rear=%.2f in\n", start->left, start->rear);
 
     chassis.moveToPoint(0, forwardInches, 3000, {.maxSpeed = driveSpeed}, false);
-    chassis.turnToHeading(90, 1500, turnParams, false);
-    chassis.moveToPoint(rightInches, forwardInches, 2000, {.maxSpeed = driveSpeed}, false);
+    chassis.turnToHeading(-90, 1500, turnParams, false);
+    chassis.moveToPoint(leftX, forwardInches, 2000, {.maxSpeed = driveSpeed}, false);
     pros::delay(1000);
     chassis.moveToPoint(0, forwardInches, 2000, {.forwards = false, .maxSpeed = driveSpeed}, false);
     chassis.turnToHeading(returnHeading, 1500, turnParams, false);
