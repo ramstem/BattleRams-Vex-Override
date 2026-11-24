@@ -111,7 +111,17 @@ void autonomous() {
  * operator control task will be stopped. Re-enabling the robot will restart the
  * task, not resume it from where it left off.
  */
+// Give the driver a one-time warning 73 seconds into driver control.
+static void updateDriverTimer(std::uint32_t startTime, bool& warningSent) {
+    if (!warningSent && pros::millis() - startTime >= 73000) {
+        warningSent = true;
+        controller.rumble("---");
+    }
+}
+
 void opcontrol() {
+    const std::uint32_t driverStartTime = pros::millis();
+    bool driverWarningSent = false;
     releaseDriveHold();
     rollerMotors.brake();
     clawMotors.brake();
@@ -154,6 +164,7 @@ void opcontrol() {
     chassis.setPose(0, 0,0);
 
     while (true) {
+        updateDriverTimer(driverStartTime, driverWarningSent);
         const auto connection = controller.is_connected();
         const auto forward = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
         const auto reverse = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
