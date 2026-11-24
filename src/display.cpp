@@ -2,6 +2,7 @@
 
 #include "globals.h"
 #include "main.h"
+#include "robot/auton.h"
 #include "lift_calibration.hpp"
 #include "liblvgl/lvgl.h"
 
@@ -61,6 +62,7 @@ std::atomic<std::size_t> selectedAutonIndex{0};
 std::atomic<bool> autonTestRunning{false};
 constexpr std::uint32_t NO_TURN_TEST_TIME = UINT32_MAX;
 std::atomic<std::uint32_t> lastTurnTestTimeMs{NO_TURN_TEST_TIME};
+std::atomic<const char*> distanceTestStatus{nullptr};
 
 // The LVGL callback sets this immediately before starting the PROS task.
 // Only one test can run at a time, so no second writer is allowed until the
@@ -414,7 +416,12 @@ void updateAutonButtonStyles() {
 
     if (selectorMessageLabel != nullptr) {
         const auto turnTimeMs = lastTurnTestTimeMs.load();
-        if (autonTestRunning.load()) {
+        const bool running = autonTestRunning.load();
+        const auto* distanceStatus = distanceTestStatus.load();
+        if ((selectionAllowed || running) &&
+            getSelectedAutonFunction() == auto_distance_test && distanceStatus != nullptr) {
+            lv_label_set_text(selectorMessageLabel, distanceStatus);
+        } else if (running) {
             lv_label_set_text(selectorMessageLabel, "Autonomous test is running");
         } else if (selectionAllowed && turnTimeMs != NO_TURN_TEST_TIME) {
             char message[48];
@@ -501,6 +508,9 @@ void runAutonTestEvent(lv_event_t* event) {
         return;
     }
 
+    if (selectedRoutine == auto_distance_test) {
+        distanceTestStatus.store(nullptr);
+    }
     autonTestRoutine = selectedRoutine;
     updateAutonButtonStyles();
 
@@ -1085,6 +1095,10 @@ const char* getSelectedAutonomousName() {
 
 bool isAutonTestRunning() {
     return autonTestRunning.load();
+}
+
+void recordDistanceTestStatus(const char* message) {
+    distanceTestStatus.store(message);
 }
 
 void recordTurnTestTime(std::uint32_t elapsedMs) {
