@@ -47,10 +47,10 @@ void initialize() {
 
     robot_ui::initialize({
         {"DO NOTHING", nullptr},
-        {"LEFT SIDE", auto_left},
-        {"RIGHT SIDE", auto_right},
-        {"SKILLS", auto_skills},
-        {"AUTON TEST", auto_starter_test}
+        {"RIGHT", right_auton},
+        {"LEFT", left_auton},
+        {"AUTON TEST", auto_starter_test},
+        {"LEFT PRELOAD", left_Preload}
     });
 }
 /**

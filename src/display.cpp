@@ -740,6 +740,13 @@ void updateDistanceSensors() {
 }
 
 void dashboardUpdateTimer(lv_timer_t*) {
+    
+    // Stop dashboard updates during autonomous
+    if (pros::competition::is_autonomous() &&
+        !pros::competition::is_disabled()) {
+        return;
+    }
+
     updateCompetitionStatus();
     updateBatteryStatus();
     updateOdometryStatus();
