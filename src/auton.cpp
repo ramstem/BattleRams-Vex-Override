@@ -130,91 +130,99 @@ void auto_starter_test() {
     std::puts("AUTON TEST: drive, turn, approach, and lift completed"); */
 }
 
-// Start directly in front of the matchloader at (0, 0), facing +Y,
-// with the wall on the left and the lift zeroed.
+// Start at the matchloader, facing away from it, with the side wall on the left.
+// Both sensors need a clear view of the same fixed surfaces at the return checkpoint.
 void auto_distance_test() {
-    chassis.setPose(0, 0, 0);
-    // Capture the wall with the robot stopped at its starting pose, facing +Y.
-    // The left sensor face is 5 inches left of the robot center.
-    const auto matchloadWallX = []() -> std::optional<double> {
-        constexpr double sideSensorOffset = 5.0;
-        std::array<int, 7> readingsMm{};
-        for (std::size_t i = 0; i < readingsMm.size(); ++i) {
-            const auto mm = distanceLeft.get();
-            if (mm < 20 || mm > 2000) return std::nullopt;
-            readingsMm[i] = mm;
-            if (i + 1 < readingsMm.size()) pros::delay(20);
+    struct Gaps {
+        double left;
+        double rear;
+    };
+    constexpr int sampleCount = 7;
+    constexpr double mmPerInch = 25.4;
+    const auto readGaps = []() -> std::optional<Gaps> {
+        std::array<int, sampleCount> left{};
+        std::array<int, sampleCount> rear{};
+        for (int i = 0; i < sampleCount; ++i) {
+            left[i] = distanceLeft.get();
+            rear[i] = distanceRear.get();
+            if (left[i] < 20 || left[i] > 2000 || rear[i] < 20 || rear[i] > 2000) {
+                return std::nullopt;
+            }
+            if (i + 1 < sampleCount) pros::delay(20);
         }
-        std::sort(readingsMm.begin(), readingsMm.end());
-        if (readingsMm.back() - readingsMm.front() > 12.7) return std::nullopt;
-        return -(sideSensorOffset + readingsMm[readingsMm.size() / 2] / 25.4);
-    }();
-    if (!matchloadWallX) {
-        std::puts("Distance-Test: startup wall reading rejected. Using odometry.");
-    } else {
-        std::printf("Distance-Test: left wall X=%.2f in\n", *matchloadWallX);
-    }
-
-    // After a 180-degree turn, the same wall is on the right. Correct X
-    // with the chassis stopped before backing into the matchloader.
-    const auto correctMatchloaderX = [&] {
-        if (!matchloadWallX) return;
-        pros::delay(100);
-        const auto before = chassis.getPose();
-        if (correctPositionFromWall(WallSensor::Right, WallAxis::X, *matchloadWallX)) {
-            std::printf("Distance-Test: right wall corrected X from %.2f to %.2f in\n",
-                        before.x, chassis.getPose().x);
-        } else {
-            std::puts("Distance-Test: right wall correction rejected. Using odometry.");
-        }
+        std::sort(left.begin(), left.end());
+        std::sort(rear.begin(), rear.end());
+        if (left.back() - left.front() > 0.5 * mmPerInch ||
+            rear.back() - rear.front() > 0.5 * mmPerInch) return std::nullopt;
+        return Gaps{left[sampleCount / 2] / mmPerInch, rear[sampleCount / 2] / mmPerInch};
     };
 
-    chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true); //back away from wall
-    moveLiftToPreset(1, 500);
-    chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false); //turn to goal
-    chassis.moveToPoint(25,-17, 1000, {.forwards=false}, false); //drive to goal
-    liftMotors.move(-127);
-    pros::delay(500);
-    liftMotors.brake();
-    clawMotors.move(-127); //score
-    pros::delay(500);
-    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
-    clawMotors.move(127);
-    chassis.turnToHeading(180, 1000, {}, false);
-    correctMatchloaderX();
-    chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
-    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
-    liftMotors.move(127);
-    pros::delay(750);
-    liftMotors.brake();
-    chassis.turnToHeading(270, 1000); // turn to goal
-    chassis.moveToPoint(23,-17, 1000, {.forwards=false}, false); //drive to goal
-    liftMotors.move(-127); //score
-    pros::delay(750);
-    liftMotors.brake();
-    clawMotors.move(-127); //score
-    chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
-    chassis.turnToHeading(180, 1000, {}, true);
-    clawMotors.move(127);
-    chassis.waitUntilDone();
-    correctMatchloaderX();
-    chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
-    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
-    liftMotors.move(127);
-    pros::delay(1250);
-    liftMotors.brake();
-    chassis.turnToHeading(270, 1000); // turn to goal
-    chassis.moveToPoint(23,-17, 300, {.forwards=false}, false); //drive to goal
-    chassis.moveToPoint(23,-17, 500, {.forwards=false,.minSpeed=40}, false); //drive to goal
-    liftMotors.move(-127);
-    pros::delay(500);
-    liftMotors.brake();
-    clawMotors.move(-127);
-    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
-    chassis.turnToHeading(180, 1000); // turn to matchload
-    clawMotors.move(127);
+    constexpr float returnHeading = 0.0f;
+    constexpr float forwardInches = 24.0f;
+    constexpr float rightInches = 12.0f;
+    constexpr float driveSpeed = 45.0f;
+    constexpr double maxCorrection = 6.0;
+    constexpr double finalGapTolerance = 0.75;
+    const auto alignedForReadings = [](float heading) {
+        return std::abs(std::remainder(heading - returnHeading, 360.0)) <= 5.0;
+    };
+    const TurnToHeadingParams turnParams{.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f};
 
-    pros::delay(500);
+    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_BRAKE);
+    chassis.setPose(0, 0, returnHeading);
+    const auto start = readGaps();
+    if (!start) {
+        std::puts("Distance-Test: invalid or unstable starting gaps. Test stopped.");
+        return;
+    }
+    std::printf("Distance-Test: start left=%.2f in, rear=%.2f in\n", start->left, start->rear);
+
+    chassis.moveToPoint(0, forwardInches, 3000, {.maxSpeed = driveSpeed}, false);
+    chassis.turnToHeading(90, 1500, turnParams, false);
+    chassis.moveToPoint(rightInches, forwardInches, 2000, {.maxSpeed = driveSpeed}, false);
+    pros::delay(1000);
+    chassis.moveToPoint(0, forwardInches, 2000, {.forwards = false, .maxSpeed = driveSpeed}, false);
+    chassis.turnToHeading(returnHeading, 1500, turnParams, false);
+    pros::delay(150);
+
+    const auto pose = chassis.getPose();
+    if (!alignedForReadings(pose.theta)) {
+        std::puts("Distance-Test: heading outside 5 degrees at return checkpoint. Test stopped.");
+        return;
+    }
+    const auto checkpoint = readGaps();
+    if (!checkpoint) {
+        std::puts("Distance-Test: invalid or unstable return gaps. Test stopped.");
+        return;
+    }
+
+    // Near the starting heading the mounting offsets cancel in the gap differences.
+    // Larger left and rear gaps correspond to positive X and Y, respectively.
+    const double x = checkpoint->left - start->left;
+    const double y = checkpoint->rear - start->rear;
+    if (!std::isfinite(pose.x) || !std::isfinite(pose.y) || y <= 0 ||
+        std::abs(x - pose.x) > maxCorrection || std::abs(y - pose.y) > maxCorrection) {
+        std::printf("Distance-Test: rejected sensor pose X=%.2f Y=%.2f (odom X=%.2f Y=%.2f). Test stopped.\n",
+                    x, y, pose.x, pose.y);
+        return;
+    }
+    std::printf("Distance-Test: sensor pose X=%.2f in, Y=%.2f in before return\n", x, y);
+    chassis.setPose(x, y, pose.theta);
+    chassis.moveToPose(0, 0, returnHeading, 3000, {.forwards = false, .maxSpeed = 35}, false);
+
+    pros::delay(150);
+    const auto final = readGaps();
+    if (!final) {
+        std::puts("Distance-Test: final gaps unavailable.");
+        return;
+    }
+    const auto heading = chassis.getPose().theta;
+    const double leftError = final->left - start->left;
+    const double rearError = final->rear - start->rear;
+    const bool matched = std::abs(leftError) <= finalGapTolerance &&
+                         std::abs(rearError) <= finalGapTolerance && alignedForReadings(heading);
+    std::printf("Distance-Test: %s. Left error=%+.2f in, rear error=%+.2f in, heading=%.1f deg\n",
+                matched ? "starting gaps matched" : "outside return tolerance", leftError, rearError, heading);
 }
 
 void auto_rear_distance_test() {
