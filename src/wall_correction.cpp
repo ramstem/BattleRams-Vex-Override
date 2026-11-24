@@ -11,7 +11,6 @@ constexpr double DEG_TO_RAD = 3.14159265358979323846 / 180.0;
 // Side sensors are assumed directly beside the center (zero forward offset).
 // Update these if mounting measurements differ.
 struct SensorMount { double right; double forward; };
-constexpr SensorMount FRONT_MOUNT{5.25, 2.25};
 constexpr SensorMount LEFT_MOUNT{-5.0, 0.0};
 constexpr SensorMount RIGHT_MOUNT{5.0, 0.0};
 
@@ -39,7 +38,7 @@ bool correctPositionFromWall(const WallCheckpoint& c) {
     pros::Distance* sensor = nullptr;
     double sensorAngle = 0;
     switch (c.sensor) {
-        case WallSensor::Front: sensor = &distanceFront; break;
+        case WallSensor::Rear: sensor = &distanceRear; sensorAngle = 180; break;
         case WallSensor::Left: sensor = &distanceLeft; sensorAngle = -90; break;
         case WallSensor::Right: sensor = &distanceRight; sensorAngle = 90; break;
         default: return false;
@@ -99,7 +98,7 @@ bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
                              double wallCoordinate, double maxCorrection) {
     SensorMount mount{};
     switch (sensor) {
-        case WallSensor::Front: mount = FRONT_MOUNT; break;
+        case WallSensor::Rear: return false; // Requires measured offsets.
         case WallSensor::Left: mount = LEFT_MOUNT; break;
         case WallSensor::Right: mount = RIGHT_MOUNT; break;
         default: return false;

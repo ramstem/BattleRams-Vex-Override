@@ -2,15 +2,15 @@
 
 #include <cstdint>
 
-// Approach a target using the FRONT sensor, holding the starting IMU heading.
-// Inches are measured from the sensor face, not the bumper. Never reverses.
+// Back toward a target using the REAR sensor, holding the starting IMU heading.
+// Inches are measured from the sensor face, not the bumper. Only drives backward.
 // Call chassis.waitUntilDone() first if a LemLib movement is running.
 // Blocks until reached (true), timeout, invalid readings, or field disable (false).
 // Uses drivetrain BRAKE mode and leaves it enabled after returning.
 bool driveToDistance(double targetInches, int maxSpeed = 40,
                      std::uint32_t timeoutMs = 2000);
 
-enum class WallSensor { Front, Left, Right };
+enum class WallSensor { Rear, Left, Right };
 enum class WallAxis { X, Y };
 
 struct WallCheckpoint {
@@ -22,7 +22,7 @@ struct WallCheckpoint {
     double maxCorrection = 6.0;
 };
 
-// All distances are inches. Mounts must face straight front/left/right.
+// All distances are inches. Mounts must face straight rear/left/right.
 // Requires a stopped robot and an unobstructed view of the specified wall.
 // Samples for 120 ms; rejects invalid/noisy ranges, movement, poor alignment,
 // and corrections exceeding maxCorrection. No motors are commanded.
@@ -30,8 +30,8 @@ struct WallCheckpoint {
 // On failure, returns false without changing the pose.
 bool correctPositionFromWall(const WallCheckpoint& checkpoint);
 
-// Convenience overload using this robot's measured mounting offsets:
-// front 5.25 right / 2.25 forward; left/right 5 outward / zero forward.
+// Convenience overload for the side sensors (5 inches outward, zero forward).
+// For Rear, pass a WallCheckpoint with the measured rear sensor face offsets.
 // wallCoordinate is relative to the robot's STARTING position (0,0).
 bool correctPositionFromWall(WallSensor sensor, WallAxis axis,
                              double wallCoordinate, double maxCorrection = 6.0);

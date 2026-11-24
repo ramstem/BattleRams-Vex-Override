@@ -20,7 +20,7 @@ pros::MotorGroup clawMotors({-12}, pros::MotorGears::green);
 pros::Imu imu(20);
 
 // Distance sensors: directions are relative to the robot.
-pros::Distance distanceFront(17);
+pros::Distance distanceRear(17);
 pros::Distance distanceLeft(16);
 pros::Distance distanceRight(15);
 

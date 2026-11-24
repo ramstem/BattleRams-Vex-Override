@@ -50,7 +50,8 @@ void initialize() {
         {"LEFT SIDE", auto_left},
         {"RIGHT SIDE", auto_right},
         {"SKILLS", auto_skills},
-        {"AUTON TEST", auto_starter_test}
+        {"AUTON TEST", auto_starter_test},
+        {"Distance-Test", auto_distance_test}
     });
 }
 /**
@@ -112,6 +113,12 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+    constexpr std::uint32_t ALERT_START_MS = 57000;
+    constexpr std::uint32_t ALERT_DURATION_MS = 2000;
+    constexpr std::uint32_t RUMBLE_REFRESH_MS = 100;
+    const auto driverStartedAt = pros::millis();
+    auto lastRumbleAt = driverStartedAt;
+    bool rumbleActive = false;
     releaseDriveHold();
     rollerMotors.brake();
     clawMotors.brake();
@@ -155,6 +162,21 @@ void opcontrol() {
 
     while (true) {
         const auto connection = controller.is_connected();
+        const auto nowMs = pros::millis();
+        const auto driverElapsedMs = nowMs - driverStartedAt;
+        const bool alertWindow = driverElapsedMs >= ALERT_START_MS &&
+                                 driverElapsedMs < ALERT_START_MS + ALERT_DURATION_MS;
+        if (connection > 0 && connection != PROS_ERR &&
+            nowMs - lastRumbleAt >= RUMBLE_REFRESH_MS) {
+            if (alertWindow && !robot_ui::isAutonTestRunning()) {
+                controller.rumble("-");
+                lastRumbleAt = nowMs;
+                rumbleActive = true;
+            } else if (rumbleActive) {
+                if (controller.rumble(" ") != PROS_ERR) rumbleActive = false;
+                lastRumbleAt = nowMs;
+            }
+        }
         const auto forward = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
         const auto reverse = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
         // PROS passes through the VEX connection status, including tethered mode.

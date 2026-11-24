@@ -26,7 +26,7 @@ struct Distance {
     int get() { return readings[std::min<std::size_t>(wall_mock::tick, readings.size() - 1)]; }
 };
 }
-inline pros::Distance distanceFront, distanceLeft, distanceRight;
+inline pros::Distance distanceRear, distanceLeft, distanceRight;
 struct MockImu { double get_heading() { return wall_mock::heading; } };
 inline MockImu imu;
 struct MockChassis {

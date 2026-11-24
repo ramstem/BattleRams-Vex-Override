@@ -34,7 +34,7 @@ bool driveToDistance(double targetInches, int maxSpeed, std::uint32_t timeoutMs)
             (pros::competition::is_disabled() ||
              !pros::competition::is_autonomous())) break;
 
-        const auto mm = distanceFront.get();
+        const auto mm = distanceRear.get();
         const double currentHeading = imu.get_heading();
         if (!std::isfinite(currentHeading) || currentHeading < 0 ||
             currentHeading >= 360) break;
@@ -64,8 +64,8 @@ bool driveToDistance(double targetInches, int maxSpeed, std::uint32_t timeoutMs)
                 const double headingError = std::remainder(heading - currentHeading, 360.0);
                 const double turnLimit = std::min(15.0, speed);
                 const double turn = std::clamp(headingError * 2.0, -turnLimit, turnLimit);
-                leftMotors.move(static_cast<int>(std::clamp(speed + turn, 0.0, static_cast<double>(maxSpeed))));
-                rightMotors.move(static_cast<int>(std::clamp(speed - turn, 0.0, static_cast<double>(maxSpeed))));
+                leftMotors.move(static_cast<int>(std::clamp(-speed + turn, -static_cast<double>(maxSpeed), 0.0)));
+                rightMotors.move(static_cast<int>(std::clamp(-speed - turn, -static_cast<double>(maxSpeed), 0.0)));
             }
         }
         pros::delay(20);

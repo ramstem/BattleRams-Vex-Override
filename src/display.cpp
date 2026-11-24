@@ -719,7 +719,7 @@ void updateMotorTemperatures() {
 
 void updateDistanceSensors() {
     const std::array<pros::Distance*, 3> sensors{
-        &distanceFront, &distanceLeft, &distanceRight
+        &distanceRear, &distanceLeft, &distanceRight
     };
     for (std::size_t i = 0; i < sensors.size(); ++i) {
         if (distanceLabels[i] == nullptr) continue;
@@ -890,9 +890,9 @@ void createDistanceScreen() {
     lv_obj_add_event_cb(back, showDashboardEvent, LV_EVENT_CLICKED, nullptr);
     createLabel(header, "DISTANCE SENSORS", 110, 10, 340, COLOR_ACCENT);
 
-    const std::array<const char*, 3> names{"FRONT", "LEFT", "RIGHT"};
+    const std::array<const char*, 3> names{"REAR", "LEFT", "RIGHT"};
     const std::array<unsigned, 3> ports{
-        distanceFront.get_port(), distanceLeft.get_port(), distanceRight.get_port()
+        distanceRear.get_port(), distanceLeft.get_port(), distanceRight.get_port()
     };
     for (std::size_t i = 0; i < names.size(); ++i) {
         lv_obj_t* card = createCard(distanceScreen, 5, 49 + 53 * i, 470, 47);

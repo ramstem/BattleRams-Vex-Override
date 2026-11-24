@@ -15,7 +15,7 @@ extern lemlib::Drivetrain drivetrain;
 
 extern pros::Imu imu;
 
-extern pros::Distance distanceFront;
+extern pros::Distance distanceRear;
 extern pros::Distance distanceLeft;
 extern pros::Distance distanceRight;
 

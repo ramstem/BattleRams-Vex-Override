@@ -16,13 +16,14 @@ using namespace lemlib;
 
 // Start at (0, 0) facing +Y, with a zeroed lift and clear space for the route.
 // Coordinates are inches from the starting pose. Heading increases clockwise.
-//write my auton here
-void auto_starter_test() {
+namespace {
+void runStarterAuton(bool useWallCorrection) {
 
     chassis.setPose(0, 0, 0);
     // Capture the wall with the robot stopped at its starting pose, facing +Y.
     // The left sensor face is 5 inches left of the robot center.
-    const auto matchloadWallX = []() -> std::optional<double> {
+    const auto matchloadWallX = [useWallCorrection]() -> std::optional<double> {
+        if (!useWallCorrection) return std::nullopt;
         constexpr double sideSensorOffset = 5.0;
         std::array<int, 7> readingsMm{};
         for (std::size_t i = 0; i < readingsMm.size(); ++i) {
@@ -35,15 +36,17 @@ void auto_starter_test() {
         if (readingsMm.back() - readingsMm.front() > 12.7) return std::nullopt;
         return -(sideSensorOffset + readingsMm[readingsMm.size() / 2] / 25.4);
     }();
-    if (!matchloadWallX) {
+    if (useWallCorrection && !matchloadWallX) {
         std::puts("Matchload: startup wall reading rejected. Using odometry.");
     }
 
-    const auto returnToMatchloader = [&] {
-        chassis.turnToHeading(180, 1000, {}, false);
+    const auto returnToMatchloader = [&](bool startClaw) {
+        chassis.turnToHeading(180, 1000);
+        if (startClaw) clawMotors.move(127);
         // At 180 degrees the same wall is on the right. Correct X before
         // the reverse approach. The wall reading does not determine Y.
         if (matchloadWallX) {
+            chassis.waitUntilDone();
             pros::delay(100);
             if (!correctPositionFromWall(WallSensor::Right, WallAxis::X, *matchloadWallX)) {
                 std::puts("Matchload: right wall correction rejected. Using odometry.");
@@ -63,7 +66,7 @@ void auto_starter_test() {
     pros::delay(500);
     chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
     clawMotors.move(127);
-    returnToMatchloader();
+    returnToMatchloader(false);
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away 
     liftMotors.move(127);
     pros::delay(750);
@@ -75,8 +78,7 @@ void auto_starter_test() {
     liftMotors.brake();
     clawMotors.move(-127); //score
     chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
-    clawMotors.move(127);
-    returnToMatchloader();
+    returnToMatchloader(true);
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
     liftMotors.move(127);
     pros::delay(1250);
@@ -120,9 +122,7 @@ void auto_starter_test() {
         return;
     }
 
-    // Wall checkpoint 1: after coming to rest at heading 0, the front sensor
-    // can correct Y against a measured wall perpendicular to +Y.
-    // correctPositionFromWall(WallSensor::Front, WallAxis::Y, measuredWallY);
+    // At heading 0, use a side sensor to correct X against a known side wall.
 
     // Tested from rest for a 90-degree clockwise turn. The early exit lets
     // the chassis settle near 90 degrees before the next move.
@@ -137,8 +137,7 @@ void auto_starter_test() {
         return;
     }
 
-    // Wall checkpoint 2: at rest facing +X, the front sensor can correct X.
-    // correctPositionFromWall(WallSensor::Front, WallAxis::X, measuredWallX);
+    // At heading 90, use a side sensor to correct Y against a known wall.
     // Use measured wall coordinates in this starting-pose frame and a clear
     // view of the wall. If correction returns false, the odometry pose is kept.
 
@@ -149,9 +148,8 @@ void auto_starter_test() {
         return;
     }
 
-    // For an approach based on standoff, use driveToDistance() instead of the
-    // last move once the front target is verified. It stops at a distance from
-    // the sensor face. Use a separate wall checkpoint to update odometry.
+    // For a separate rear-first approach, driveToDistance() measures the gap
+    // from the rear sensor face. Use a wall checkpoint to update odometry.
 
     // Raise to preset 1 (10 inches) at rest. Check the result before adding
     // a scoring action. The lift holds at the preset when the test ends.
@@ -162,7 +160,17 @@ void auto_starter_test() {
     std::puts("AUTON TEST: drive, turn, approach, and lift completed"); */
 }
 
+} // namespace
+
+void auto_starter_test() {
+    runStarterAuton(false);
+}
+
 void auto_distance_test() {
+    runStarterAuton(true);
+}
+
+void auto_rear_distance_test() {
     const bool reached = driveToDistance(6.0, 40, 3000);
     std::cout << "Distance test: " << (reached ? "reached target" : "stopped without reaching target") << std::endl;
 }
