@@ -16,45 +16,10 @@ using namespace lemlib;
 
 // Start at (0, 0) facing +Y, with a zeroed lift and clear space for the route.
 // Coordinates are inches from the starting pose. Heading increases clockwise.
-namespace {
-void runStarterAuton(bool useWallCorrection) {
+//write my auton here
+void auto_starter_test() {
 
     chassis.setPose(0, 0, 0);
-    // Capture the wall with the robot stopped at its starting pose, facing +Y.
-    // The left sensor face is 5 inches left of the robot center.
-    const auto matchloadWallX = [useWallCorrection]() -> std::optional<double> {
-        if (!useWallCorrection) return std::nullopt;
-        constexpr double sideSensorOffset = 5.0;
-        std::array<int, 7> readingsMm{};
-        for (std::size_t i = 0; i < readingsMm.size(); ++i) {
-            const auto mm = distanceLeft.get();
-            if (mm < 20 || mm > 2000) return std::nullopt;
-            readingsMm[i] = mm;
-            if (i + 1 < readingsMm.size()) pros::delay(20);
-        }
-        std::sort(readingsMm.begin(), readingsMm.end());
-        if (readingsMm.back() - readingsMm.front() > 12.7) return std::nullopt;
-        return -(sideSensorOffset + readingsMm[readingsMm.size() / 2] / 25.4);
-    }();
-    if (useWallCorrection && !matchloadWallX) {
-        std::puts("Matchload: startup wall reading rejected. Using odometry.");
-    }
-
-    const auto returnToMatchloader = [&](bool startClaw) {
-        chassis.turnToHeading(180, 1000);
-        if (startClaw) clawMotors.move(127);
-        // At 180 degrees the same wall is on the right. Correct X before
-        // the reverse approach. The wall reading does not determine Y.
-        if (matchloadWallX) {
-            chassis.waitUntilDone();
-            pros::delay(100);
-            if (!correctPositionFromWall(WallSensor::Right, WallAxis::X, *matchloadWallX)) {
-                std::puts("Matchload: right wall correction rejected. Using odometry.");
-            }
-        }
-        chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
-    };
-
     chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true); //back away from wall
     moveLiftToPreset(1, 500);
     chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false); //turn to goal
@@ -66,7 +31,9 @@ void runStarterAuton(bool useWallCorrection) {
     pros::delay(500);
     chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
     clawMotors.move(127);
-    returnToMatchloader(false);
+    chassis.turnToHeading(180, 1000); // turn to matchload
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away 
     liftMotors.move(127);
     pros::delay(750);
@@ -78,7 +45,10 @@ void runStarterAuton(bool useWallCorrection) {
     liftMotors.brake();
     clawMotors.move(-127); //score
     chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
-    returnToMatchloader(true);
+    chassis.turnToHeading(180, 1000,{},true); // turn to matchload
+    clawMotors.move(127);
+
+    chassis.moveToPoint(0,-5, 1000, {.forwards=false,.maxSpeed=80}, false); //get matchload
     chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
     liftMotors.move(127);
     pros::delay(1250);
@@ -160,14 +130,91 @@ void runStarterAuton(bool useWallCorrection) {
     std::puts("AUTON TEST: drive, turn, approach, and lift completed"); */
 }
 
-} // namespace
-
-void auto_starter_test() {
-    runStarterAuton(false);
-}
-
+// Start directly in front of the matchloader at (0, 0), facing +Y,
+// with the wall on the left and the lift zeroed.
 void auto_distance_test() {
-    runStarterAuton(true);
+    chassis.setPose(0, 0, 0);
+    // Capture the wall with the robot stopped at its starting pose, facing +Y.
+    // The left sensor face is 5 inches left of the robot center.
+    const auto matchloadWallX = []() -> std::optional<double> {
+        constexpr double sideSensorOffset = 5.0;
+        std::array<int, 7> readingsMm{};
+        for (std::size_t i = 0; i < readingsMm.size(); ++i) {
+            const auto mm = distanceLeft.get();
+            if (mm < 20 || mm > 2000) return std::nullopt;
+            readingsMm[i] = mm;
+            if (i + 1 < readingsMm.size()) pros::delay(20);
+        }
+        std::sort(readingsMm.begin(), readingsMm.end());
+        if (readingsMm.back() - readingsMm.front() > 12.7) return std::nullopt;
+        return -(sideSensorOffset + readingsMm[readingsMm.size() / 2] / 25.4);
+    }();
+    if (!matchloadWallX) {
+        std::puts("Distance-Test: startup wall reading rejected. Using odometry.");
+    } else {
+        std::printf("Distance-Test: left wall X=%.2f in\n", *matchloadWallX);
+    }
+
+    // After a 180-degree turn, the same wall is on the right. Correct X
+    // with the chassis stopped before backing into the matchloader.
+    const auto correctMatchloaderX = [&] {
+        if (!matchloadWallX) return;
+        pros::delay(100);
+        const auto before = chassis.getPose();
+        if (correctPositionFromWall(WallSensor::Right, WallAxis::X, *matchloadWallX)) {
+            std::printf("Distance-Test: right wall corrected X from %.2f to %.2f in\n",
+                        before.x, chassis.getPose().x);
+        } else {
+            std::puts("Distance-Test: right wall correction rejected. Using odometry.");
+        }
+    };
+
+    chassis.moveToPoint(0, -6, 500, {.forwards=false, .minSpeed=127}, true); //back away from wall
+    moveLiftToPreset(1, 500);
+    chassis.turnToHeading(270, 500, {.maxSpeed = 45, .minSpeed = 23, .earlyExitRange = 7.5f}, false); //turn to goal
+    chassis.moveToPoint(25,-17, 1000, {.forwards=false}, false); //drive to goal
+    liftMotors.move(-127);
+    pros::delay(500);
+    liftMotors.brake();
+    clawMotors.move(-127); //score
+    pros::delay(500);
+    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
+    clawMotors.move(127);
+    chassis.turnToHeading(180, 1000, {}, false);
+    correctMatchloaderX();
+    chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
+    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
+    liftMotors.move(127);
+    pros::delay(750);
+    liftMotors.brake();
+    chassis.turnToHeading(270, 1000); // turn to goal
+    chassis.moveToPoint(23,-17, 1000, {.forwards=false}, false); //drive to goal
+    liftMotors.move(-127); //score
+    pros::delay(750);
+    liftMotors.brake();
+    clawMotors.move(-127); //score
+    chassis.moveToPoint(0,-23, 1000, {.forwards=true}, false); //drive away from goal
+    chassis.turnToHeading(180, 1000, {}, true);
+    clawMotors.move(127);
+    chassis.waitUntilDone();
+    correctMatchloaderX();
+    chassis.moveToPoint(0, -5, 1000, {.forwards = false, .maxSpeed = 80}, false);
+    chassis.moveToPoint(0,-18, 1000, {.forwards=true},true); //back away
+    liftMotors.move(127);
+    pros::delay(1250);
+    liftMotors.brake();
+    chassis.turnToHeading(270, 1000); // turn to goal
+    chassis.moveToPoint(23,-17, 300, {.forwards=false}, false); //drive to goal
+    chassis.moveToPoint(23,-17, 500, {.forwards=false,.minSpeed=40}, false); //drive to goal
+    liftMotors.move(-127);
+    pros::delay(500);
+    liftMotors.brake();
+    clawMotors.move(-127);
+    chassis.moveToPoint(0,-21, 1000, {.forwards=true}, false); //drive away from goal
+    chassis.turnToHeading(180, 1000); // turn to matchload
+    clawMotors.move(127);
+
+    pros::delay(500);
 }
 
 void auto_rear_distance_test() {
