@@ -677,7 +677,7 @@ bin/display.cpp.o: src/display.cpp include/display.hpp include/globals.h \
  include/fmt/args.h include/lemlib/logger/message.hpp \
  include/lemlib/logger/infoSink.hpp \
  include/lemlib/logger/telemetrySink.hpp include/main.h \
- include/lift_calibration.hpp
+ include/robot/auton.h include/lift_calibration.hpp
 include/display.hpp:
 include/globals.h:
 include/api.h:
@@ -1441,4 +1441,5 @@ include/lemlib/logger/message.hpp:
 include/lemlib/logger/infoSink.hpp:
 include/lemlib/logger/telemetrySink.hpp:
 include/main.h:
+include/robot/auton.h:
 include/lift_calibration.hpp:

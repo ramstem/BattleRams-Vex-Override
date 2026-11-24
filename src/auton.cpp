@@ -176,10 +176,10 @@ void auto_distance_test() {
 
     constexpr float returnHeading = 0.0f;
     constexpr float forwardInches = 24.0f;
-    constexpr float leftX = -12.0f;
-    constexpr float driveSpeed = 45.0f;
+    constexpr float leftX = -24.0f;
+    constexpr float driveSpeed = 60.0f;
     constexpr double maxCorrection = 6.0;
-    constexpr double finalGapTolerance = 0.75;
+    constexpr double finalGapTolerance = 0.25;
     const auto alignedForReadings = [](float heading) {
         return std::abs(std::remainder(heading - returnHeading, 360.0)) <= 5.0;
     };
