@@ -130,11 +130,11 @@ void auto_starter_test() {
     std::puts("AUTON TEST: drive, turn, approach, and lift completed"); */
 }
 
-// Start at the matchloader, facing away from it, with the side wall on the left.
+// Start at the matchloader, facing away from it, with the side wall on the right.
 // Both sensors need a clear view of the same fixed surfaces at the return checkpoint.
 void auto_distance_test() {
     struct Gaps {
-        double left;
+        double right;
         double rear;
     };
     const auto report = [](const char* message) {
@@ -156,22 +156,22 @@ void auto_distance_test() {
         }
         return median / mmPerInch;
     };
-    const auto readGaps = [&](const char* leftFailure, const char* rearFailure) -> std::optional<Gaps> {
-        std::array<int, sampleCount> left{};
+    const auto readGaps = [&](const char* rightFailure, const char* rearFailure) -> std::optional<Gaps> {
+        std::array<int, sampleCount> right{};
         std::array<int, sampleCount> rear{};
         for (int i = 0; i < sampleCount; ++i) {
-            left[i] = distanceLeft.get();
+            right[i] = distanceRight.get();
             rear[i] = distanceRear.get();
             if (i + 1 < sampleCount) pros::delay(20);
         }
-        const auto leftGap = stableGap(left);
+        const auto rightGap = stableGap(right);
         const auto rearGap = stableGap(rear);
-        if (!leftGap || !rearGap) {
-            report(!leftGap ? leftFailure : rearFailure);
-            std::printf("Distance-Test: last sample left=%d mm, rear=%d mm\n", left.back(), rear.back());
+        if (!rightGap || !rearGap) {
+            report(!rightGap ? rightFailure : rearFailure);
+            std::printf("Distance-Test: last sample right=%d mm, rear=%d mm\n", right.back(), rear.back());
             return std::nullopt;
         }
-        return Gaps{*leftGap, *rearGap};
+        return Gaps{*rightGap, *rearGap};
     };
 
     constexpr float returnHeading = 0.0f;
@@ -188,10 +188,10 @@ void auto_distance_test() {
     chassis.setBrakeMode(pros::E_MOTOR_BRAKE_BRAKE);
     chassis.setPose(0, 0, returnHeading);
     report("Reading starting gaps...");
-    const auto start = readGaps("Start blocked: check left sensor (16)",
+    const auto start = readGaps("Start blocked: check right sensor (15)",
                                 "Start blocked: check rear sensor (17)");
     if (!start) return;
-    std::printf("Distance-Test: start left=%.2f in, rear=%.2f in\n", start->left, start->rear);
+    std::printf("Distance-Test: start right=%.2f in, rear=%.2f in\n", start->right, start->rear);
 
     report("Driving test route...");
     chassis.moveToPoint(0, forwardInches, 3000, {.maxSpeed = driveSpeed}, false);
@@ -207,13 +207,13 @@ void auto_distance_test() {
         report("Return stopped: heading outside 5 deg");
         return;
     }
-    const auto checkpoint = readGaps("Return blocked: check left sensor (16)",
+    const auto checkpoint = readGaps("Return blocked: check right sensor (15)",
                                      "Return blocked: check rear sensor (17)");
     if (!checkpoint) return;
 
     // Near the starting heading the mounting offsets cancel in the gap differences.
-    // Larger left and rear gaps correspond to positive X and Y, respectively.
-    const double x = checkpoint->left - start->left;
+    // Moving right shrinks the right gap. Moving forward grows the rear gap.
+    const double x = start->right - checkpoint->right;
     const double y = checkpoint->rear - start->rear;
     if (!std::isfinite(pose.x) || !std::isfinite(pose.y) || y <= 0 ||
         std::abs(x - pose.x) > maxCorrection || std::abs(y - pose.y) > maxCorrection) {
@@ -228,17 +228,17 @@ void auto_distance_test() {
     chassis.moveToPose(0, 0, returnHeading, 3000, {.forwards = false, .maxSpeed = 35}, false);
 
     pros::delay(150);
-    const auto final = readGaps("Finish: left reading unavailable",
+    const auto final = readGaps("Finish: right reading unavailable",
                                 "Finish: rear reading unavailable");
     if (!final) return;
     const auto heading = chassis.getPose().theta;
-    const double leftError = final->left - start->left;
+    const double rightError = final->right - start->right;
     const double rearError = final->rear - start->rear;
-    const bool matched = std::abs(leftError) <= finalGapTolerance &&
+    const bool matched = std::abs(rightError) <= finalGapTolerance &&
                          std::abs(rearError) <= finalGapTolerance && alignedForReadings(heading);
     report(matched ? "Starting gaps matched" : "Outside return tolerance");
-    std::printf("Distance-Test: left error=%+.2f in, rear error=%+.2f in, heading=%.1f deg\n",
-                leftError, rearError, heading);
+    std::printf("Distance-Test: right error=%+.2f in, rear error=%+.2f in, heading=%.1f deg\n",
+                rightError, rearError, heading);
 }
 
 void auto_rear_distance_test() {
