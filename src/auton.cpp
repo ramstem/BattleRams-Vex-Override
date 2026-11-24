@@ -202,32 +202,45 @@ void auto_distance_test() {
     chassis.turnToHeading(returnHeading, 1500, turnParams, false);
     pros::delay(150);
 
-    const auto pose = chassis.getPose();
-    if (!alignedForReadings(pose.theta)) {
-        report("Return stopped: heading outside 5 deg");
-        return;
-    }
-    const auto checkpoint = readGaps("Return blocked: check right sensor (15)",
-                                     "Return blocked: check rear sensor (17)");
-    if (!checkpoint) return;
+    const auto correctReturnPose = [&](const char* stage, double minimumY) {
+        const auto pose = chassis.getPose();
+        if (!alignedForReadings(pose.theta)) {
+            report("Return stopped: heading outside 5 deg");
+            return false;
+        }
+        const auto gaps = readGaps("Return blocked: check right sensor (15)",
+                                   "Return blocked: check rear sensor (17)");
+        if (!gaps) return false;
 
-    // Near the starting heading the mounting offsets cancel in the gap differences.
-    // Moving right shrinks the right gap. Moving forward grows the rear gap.
-    const double x = start->right - checkpoint->right;
-    const double y = checkpoint->rear - start->rear;
-    if (!std::isfinite(pose.x) || !std::isfinite(pose.y) || y <= 0 ||
-        std::abs(x - pose.x) > maxCorrection || std::abs(y - pose.y) > maxCorrection) {
-        std::printf("Distance-Test: rejected sensor pose X=%.2f Y=%.2f (odom X=%.2f Y=%.2f). Test stopped.\n",
-                    x, y, pose.x, pose.y);
-        report("Return stopped: sensor pose rejected");
-        return;
-    }
-    std::printf("Distance-Test: sensor pose X=%.2f in, Y=%.2f in before return\n", x, y);
-    report("Backing to starting position...");
-    chassis.setPose(x, y, pose.theta);
-    chassis.moveToPose(0, 0, returnHeading, 3000, {.forwards = false, .maxSpeed = 35}, false);
+        // Near the starting heading the mounting offsets cancel in the gap differences.
+        // Moving right shrinks the right gap. Moving forward grows the rear gap.
+        const double x = start->right - gaps->right;
+        const double y = gaps->rear - start->rear;
+        if (!std::isfinite(pose.x) || !std::isfinite(pose.y) || y <= minimumY ||
+            std::abs(x - pose.x) > maxCorrection || std::abs(y - pose.y) > maxCorrection) {
+            std::printf("Distance-Test: %s rejected sensor pose X=%.2f Y=%.2f (odom X=%.2f Y=%.2f)\n",
+                        stage, x, y, pose.x, pose.y);
+            report("Return stopped: sensor pose rejected");
+            return false;
+        }
+        std::printf("Distance-Test: %s corrected X from %+.2f to %+.2f in, Y=%.2f in\n",
+                    stage, pose.x, x, y);
+        chassis.setPose(x, y, pose.theta);
+        return true;
+    };
 
+    // Recheck the drift before the final approach, with room to steer while backing.
+    constexpr float approachY = 12.0f;
+    if (!correctReturnPose("Before return", approachY)) return;
+    report("Backing to approach checkpoint...");
+    chassis.moveToPose(0, approachY, returnHeading, 2000, {.forwards = false, .maxSpeed = 35}, false);
     pros::delay(150);
+
+    if (!correctReturnPose("At approach checkpoint", 0.0)) return;
+    report("Backing to starting position...");
+    chassis.moveToPose(0, 0, returnHeading, 2500, {.forwards = false, .maxSpeed = 25}, false);
+    pros::delay(150);
+
     const auto final = readGaps("Finish: right reading unavailable",
                                 "Finish: rear reading unavailable");
     if (!final) return;
